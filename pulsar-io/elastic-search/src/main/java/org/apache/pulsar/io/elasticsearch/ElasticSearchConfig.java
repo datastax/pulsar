@@ -55,6 +55,13 @@ public class ElasticSearchConfig implements Serializable {
     private String indexName;
 
     @FieldDoc(
+            required = false,
+            defaultValue = "false",
+            help = "Sets whether the Sink has to take into account the Schema or if it should simply copy the raw message to Elastichsearch"
+    )
+    private boolean schemaAware = false;
+
+    @FieldDoc(
         required = false,
         defaultValue = "_doc",
         help = "The type name that the connector writes messages to, with the default value set to _doc." +

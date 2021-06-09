@@ -96,6 +96,7 @@ public class ElasticSearchSinkTests {
 
         map = new HashMap<String, Object> ();
         map.put("elasticSearchUrl", "http://"+container.getHttpHostAddress());
+        map.put("schemaAware", "true");
         sink = new ElasticSearchSink();
 
         mockRecord = mock(Record.class);

@@ -95,6 +95,7 @@ public class ElasticSearchExtractTests {
         elasticSearchSink.open(ImmutableMap.of(
                 "elasticSearchUrl", "http://localhost:9200",
                 "primaryFields","c",
+                "schemaAware", "true",
                 "keyIgnore", "true"), null);
         Pair<String, String> pair = elasticSearchSink.extractIdAndDocument(genericObjectRecord);
         assertEquals(pair.getLeft(), "1");
@@ -105,6 +106,7 @@ public class ElasticSearchExtractTests {
         elasticSearchSink2.open(ImmutableMap.of(
                 "elasticSearchUrl", "http://localhost:9200",
                 "primaryFields","c,d",
+                "schemaAware", "true",
                 "keyIgnore", "true"), null);
         Pair<String, String> pair2 = elasticSearchSink2.extractIdAndDocument(genericObjectRecord);
         assertEquals(pair2.getLeft(), "[\"1\",1]");
@@ -189,7 +191,8 @@ public class ElasticSearchExtractTests {
         };
 
         ElasticSearchSink elasticSearchSink = new ElasticSearchSink();
-        elasticSearchSink.open(ImmutableMap.of("elasticSearchUrl", "http://localhost:9200"), null);
+        elasticSearchSink.open(ImmutableMap.of("elasticSearchUrl", "http://localhost:9200",
+                "schemaAware", "true"), null);
         Pair<String, String> pair = elasticSearchSink.extractIdAndDocument(genericObjectRecord);
         assertEquals(pair.getLeft(), "[\"1\",1]");
         assertEquals(pair.getRight(), "{\"c\":\"1\",\"d\":1,\"e\":{\"a\":\"a\",\"b\":true,\"d\":1.0,\"f\":1.0,\"i\":1,\"l\":10}}");
