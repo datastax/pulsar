@@ -21,6 +21,7 @@ package org.apache.pulsar.io.elasticsearch;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.google.common.collect.ImmutableMap;
+import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaBuilder;
@@ -29,7 +30,7 @@ import org.apache.avro.generic.GenericRecord;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
-import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -81,7 +82,24 @@ public class JsonConverterTests {
 
     @Test
     public void testLogicalTypesToJson() {
-        Schema decimalType = LogicalTypes.decimal(3,3).addToSchema(Schema.create(Schema.Type.BYTES));
+        org.apache.avro.Schema decimalType  = new LogicalType("cql_decimal").addToSchema(
+                org.apache.avro.SchemaBuilder.record("record")
+                        .fields()
+                        .name("bigint").type().bytesType().noDefault()
+                        .name("scale").type().intType().noDefault()
+                        .endRecord()
+        );
+        org.apache.avro.Schema varintType  = new LogicalType("cql_varint").addToSchema(
+                org.apache.avro.Schema.create(org.apache.avro.Schema.Type.BYTES)
+        );
+        org.apache.avro.Schema durationType  = new LogicalType("cql_duration").addToSchema(
+                org.apache.avro.SchemaBuilder.record("record")
+                        .fields()
+                        .name("months").type().intType().noDefault()
+                        .name("days").type().intType().noDefault()
+                        .name("nanoseconds").type().longType().noDefault()
+                        .endRecord()
+        );
         Schema dateType = LogicalTypes.date().addToSchema(Schema.create(Schema.Type.INT));
         Schema timestampMillisType = LogicalTypes.timestampMillis().addToSchema(Schema.create(Schema.Type.LONG));
         Schema timestampMicrosType = LogicalTypes.timestampMicros().addToSchema(Schema.create(Schema.Type.LONG));
@@ -97,12 +115,24 @@ public class JsonConverterTests {
                 .name("timemillis").type(timeMillisType).noDefault()
                 .name("timemicros").type(timeMicrosType).noDefault()
                 .name("myuuid").type(uuidType).noDefault()
+                .name("myvarint").type(varintType).noDefault()
+                .name("myduration").type(durationType).noDefault()
                 .endRecord();
 
         final long MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
-        BigDecimal myDecimal = new BigDecimal("10.34");
+
         UUID myUuid = UUID.randomUUID();
         Calendar calendar = new GregorianCalendar(TimeZone.getTimeZone("Europe/Copenhagen"));
+
+        GenericRecord myDecimal = new GenericData.Record(decimalType);
+        myDecimal.put("bigint", BigInteger.valueOf(123).toByteArray());
+        myDecimal.put("scale", 2);
+
+        GenericRecord myduration = new GenericData.Record(durationType);
+        myduration.put("months", 5);
+        myduration.put("days", 2);
+        myduration.put("nanoseconds", 1000 * 1000 * 1000 * 30L); // 30 seconds
+
         GenericRecord genericRecord = new GenericData.Record(schema);
         genericRecord.put("amount", myDecimal);
         genericRecord.put("mydate", (int)calendar.toInstant().getEpochSecond());
@@ -111,13 +141,20 @@ public class JsonConverterTests {
         genericRecord.put("timemillis", (int)(calendar.getTimeInMillis() % MILLIS_PER_DAY));
         genericRecord.put("timemicros", (calendar.getTimeInMillis() %MILLIS_PER_DAY) * 1000);
         genericRecord.put("myuuid", myUuid.toString());
+        genericRecord.put("myvarint", BigInteger.valueOf(12234).toByteArray());
+        genericRecord.put("myduration", myduration);
+
         JsonNode jsonNode = JsonConverter.toJson(genericRecord);
-        assertEquals(new BigDecimal(jsonNode.get("amount").asText()), myDecimal);
+        assertEquals(jsonNode.get("amount").asText(), "1.23");
+        assertEquals(jsonNode.get("myvarint").asLong(), 12234);
         assertEquals(jsonNode.get("mydate").asInt(), calendar.toInstant().getEpochSecond());
         assertEquals(jsonNode.get("tsmillis").asInt(), (int)calendar.getTimeInMillis());
         assertEquals(jsonNode.get("tsmicros").asLong(), calendar.getTimeInMillis() * 1000);
         assertEquals(jsonNode.get("timemillis").asInt(), (int)(calendar.getTimeInMillis() % MILLIS_PER_DAY));
         assertEquals(jsonNode.get("timemicros").asLong(), (calendar.getTimeInMillis() %MILLIS_PER_DAY) * 1000);
+        assertEquals(jsonNode.get("myduration").get("months").asInt(), 5);
+        assertEquals(jsonNode.get("myduration").get("days").asInt(), 2);
+        assertEquals(jsonNode.get("myduration").get("nanoseconds").asLong(), 30000000000L);
         assertEquals(UUID.fromString(jsonNode.get("myuuid").asText()), myUuid);
     }
 }
