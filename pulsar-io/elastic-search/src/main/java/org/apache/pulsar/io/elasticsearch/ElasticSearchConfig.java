@@ -112,7 +112,7 @@ public class ElasticSearchConfig implements Serializable {
             defaultValue = "-1",
             help = "The maximum number of retries for elasticsearch requests. Use -1 to disable it."
     )
-    private int maxRetries = 1;
+    private int maxRetries = -1;
 
     @FieldDoc(
             required = false,
