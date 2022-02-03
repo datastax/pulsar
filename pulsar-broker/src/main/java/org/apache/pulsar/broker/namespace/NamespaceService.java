@@ -1341,10 +1341,18 @@ public class NamespaceService implements AutoCloseable {
         return String.format(SLA_NAMESPACE_FMT, config.getClusterName(), host, port);
     }
 
+    public static boolean isHeartBeatNamespace(String namespace) {
+        Matcher m = HEARTBEAT_NAMESPACE_PATTERN.matcher(namespace);
+        if (m.matches()) {
+            return true;
+        }
+        return false;
+    }
+
     public static String checkHeartbeatNamespace(ServiceUnitId ns) {
         Matcher m = HEARTBEAT_NAMESPACE_PATTERN.matcher(ns.getNamespaceObject().toString());
         if (m.matches()) {
-            LOG.debug("SLAMonitoring namespace matched the lookup namespace {}", ns.getNamespaceObject().toString());
+            LOG.debug("Heartbeat namespace matched the lookup namespace {}", ns.getNamespaceObject().toString());
             return String.format("http://%s", m.group(1));
         } else {
             return null;

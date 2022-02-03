@@ -31,6 +31,7 @@ import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.TimeAverageMessageData;
 import org.apache.pulsar.broker.loadbalance.LoadData;
 import org.apache.pulsar.broker.loadbalance.LoadSheddingStrategy;
+import org.apache.pulsar.broker.namespace.NamespaceService;
 import org.apache.pulsar.policies.data.loadbalancer.LocalBrokerData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,6 +102,14 @@ public class ThresholdShedder implements LoadSheddingStrategy {
                     TimeAverageMessageData shortTermData = bundleData.getShortTermData();
                     double throughput = shortTermData.getMsgThroughputIn() + shortTermData.getMsgThroughputOut();
                     return Pair.of(bundle, throughput);
+                }).filter(e -> {
+                    // We cannot unload the bundle that contains the Heartbeat of the broker
+                    final String namespaceName = LoadManagerShared.getNamespaceNameFromBundleName(e.getKey());
+                    boolean isHeartbeat  = NamespaceService.isHeartBeatNamespace(namespaceName);
+                    if (isHeartbeat) {
+                        log.info("Skipping Heartbeat bundle {}", e.getKey());
+                    }
+                    return !isHeartbeat;
                 }).filter(e ->
                         !recentlyUnloadedBundles.containsKey(e.getLeft())
                 ).filter(e ->
