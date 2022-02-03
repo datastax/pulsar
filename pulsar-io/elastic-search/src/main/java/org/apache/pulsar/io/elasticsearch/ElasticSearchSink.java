@@ -93,7 +93,7 @@ public class ElasticSearchSink implements Sink<GenericObject> {
                                 if (elasticSearchConfig.isBulkEnabled()) {
                                     elasticsearchClient.bulkDelete(record, idAndDoc.getLeft());
                                 } else {
-                                    elasticsearchClient.deleteDocument(record, idAndDoc.getLeft());
+                                    elasticsearchClient.deleteDocumentWithRetry(record, idAndDoc.getLeft());
                                 }
                             }
                             break;
@@ -107,7 +107,7 @@ public class ElasticSearchSink implements Sink<GenericObject> {
                     if (elasticSearchConfig.isBulkEnabled()) {
                         elasticsearchClient.bulkIndex(record, idAndDoc);
                     } else {
-                        elasticsearchClient.indexDocument(record, idAndDoc);
+                        elasticsearchClient.indexDocumentWithRetry(record, idAndDoc);
                     }
                 }
             } catch (JsonProcessingException jsonProcessingException) {

@@ -38,6 +38,7 @@ import org.testng.annotations.Test;
 import java.io.IOException;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.*;
@@ -95,7 +96,7 @@ public class ElasticSearchClientTests {
 
     @Test
     public void testIndexDelete() throws Exception {
-        client.createIndexIfNeeded(INDEX);
+        assertTrue(client.createIndexIfNeeded(INDEX));
         MockRecord<GenericObject> mockRecord = new MockRecord<>();
         client.indexDocument(mockRecord, Pair.of("1","{ \"a\":1}"));
         assertEquals(mockRecord.acked, 1);
@@ -106,6 +107,51 @@ public class ElasticSearchClientTests {
         assertEquals(mockRecord.acked, 2);
         assertEquals(mockRecord.failed, 0);
         assertEquals(client.totalHits(INDEX), 0);
+    }
+
+    @Test
+    public void testIndexDeleteWithRetry() throws Exception {
+        try (ElasticToxiproxiContainer toxiproxy = new ElasticToxiproxiContainer(container, network))
+        {
+            toxiproxy.start();
+
+            final String index = "indexretry-" + UUID.randomUUID();
+            ElasticSearchConfig config = new ElasticSearchConfig()
+                    .setElasticSearchUrl("http://" + toxiproxy.getHttpHostAddress())
+                    .setIndexName(index)
+                    .setMaxRetries(1000);
+
+            try (ElasticSearchClient client = new ElasticSearchClient(config)) {
+                try {
+                    assertTrue(client.createIndexIfNeeded(index));
+
+                    log.info("starting the toxic");
+                    toxiproxy.getProxy().setConnectionCut(false);
+                    toxiproxy.getProxy().toxics().latency("elasticpause", ToxicDirection.DOWNSTREAM, 15000);
+                    toxiproxy.removeToxicAfterDelay("elasticpause", 15000);
+
+                    MockRecord<GenericObject> mockRecord = new MockRecord<>();
+                    client.indexDocumentWithRetry(mockRecord, Pair.of("1", "{\"a\":1}"));
+                    Awaitility.await().atMost(20, TimeUnit.SECONDS).untilAsserted(() -> {
+                        assertEquals(mockRecord.acked, 1);
+                        assertEquals(mockRecord.failed, 0);
+                        assertEquals(client.totalHits(index), 1);
+                    });
+
+                    toxiproxy.getProxy().toxics().latency("elasticpause", ToxicDirection.DOWNSTREAM, 15000);
+                    toxiproxy.removeToxicAfterDelay("elasticpause", 15000);
+
+                    client.deleteDocument(mockRecord, "1");
+                    Awaitility.await().atMost(20, TimeUnit.SECONDS).untilAsserted(() -> {
+                        assertEquals(mockRecord.acked, 2);
+                        assertEquals(mockRecord.failed, 0);
+                        assertEquals(client.totalHits(index), 0);
+                    });
+                } finally {
+                    client.delete(index);
+                }
+            }
+        }
     }
 
     @Test
@@ -186,7 +232,7 @@ public class ElasticSearchClientTests {
                     // disabled, we want to have full control over flush() method
                     .setBulkFlushIntervalInMs(-1);
 
-            try (ElasticSearchClient client = new ElasticSearchClient(config);) {
+            try (ElasticSearchClient client = new ElasticSearchClient(config)) {
                 try {
                     assertTrue(client.createIndexIfNeeded(index));
                     MockRecord<GenericObject> mockRecord = new MockRecord<>();
@@ -269,10 +315,11 @@ public class ElasticSearchClientTests {
                     log.info("elapsed = {}", elapsed);
                     assertTrue(elapsed > 29000); // bulkIndex was blocking while elasticsearch was down or busy
 
-                    Thread.sleep(3000L);
-                    assertEquals(mockRecord.acked, 15);
-                    assertEquals(mockRecord.failed, 0);
-                    assertEquals(client.records.size(), 0);
+                    Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
+                        assertEquals(mockRecord.acked, 15);
+                        assertEquals(mockRecord.failed, 0);
+                        assertEquals(client.records.size(), 0);
+                    });
 
                 } finally {
                     client.delete(index);

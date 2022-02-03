@@ -265,6 +265,10 @@ public class ElasticSearchClient implements AutoCloseable {
         }
     }
 
+    public boolean indexDocumentWithRetry(Record<GenericObject> record, Pair<String, String> idAndDoc) {
+        return retry(() -> indexDocument(record, idAndDoc), "index document");
+    }
+
     /**
      * Index an elasticsearch document and ack the record.
      * @param record
@@ -291,7 +295,7 @@ public class ElasticSearchClient implements AutoCloseable {
                 return false;
             }
         } catch (final Exception ex) {
-            log.error("index failed id=" + idAndDoc.getLeft(), ex);
+            log.warn("index failed id=" + idAndDoc.getLeft(), ex);
             record.fail();
             throw ex;
         }
@@ -312,6 +316,10 @@ public class ElasticSearchClient implements AutoCloseable {
             record.fail();
             throw e;
         }
+    }
+
+    public boolean deleteDocumentWithRetry(Record<GenericObject> record, String id) {
+        return retry(() -> deleteDocument(record, id), "delete document");
     }
 
     /**
