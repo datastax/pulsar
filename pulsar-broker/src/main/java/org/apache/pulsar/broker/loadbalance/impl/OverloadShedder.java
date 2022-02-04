@@ -105,7 +105,7 @@ public class OverloadShedder implements LoadSheddingStrategy {
                             final String namespaceName = LoadManagerShared.getNamespaceNameFromBundleName(e.getKey());
                             boolean isHeartbeat  = NamespaceService.isHeartBeatNamespace(namespaceName);
                             if (isHeartbeat) {
-                                log.info("Skipping Heartbeat bundle {}", e.getKey());
+                                log.debug("Skipping Heartbeat bundle {}", e.getKey());
                             }
                             return !isHeartbeat;
                         }).map((e) -> {
