@@ -256,7 +256,7 @@ public class ElasticSearchConfig implements Serializable {
             defaultValue = "true",
             help = "If ignoreUnsupportedFields is true, unsupported AVRO fields are nullified and AVRO logical types are decoded as known AVRO types, otherwise it fails."
     )
-    private boolean ignoreUnsupportedFields = true;
+    private boolean ignoreUnsupportedFields = false;
 
     public enum MalformedDocAction {
         IGNORE,
