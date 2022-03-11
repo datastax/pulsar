@@ -19,6 +19,7 @@
 package org.apache.pulsar.io.elasticsearch;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.BinaryNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.google.common.collect.ImmutableMap;
 import org.apache.avro.LogicalType;
@@ -34,8 +35,7 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.*;
 
 public class JsonConverterTests {
 
@@ -68,7 +68,7 @@ public class JsonConverterTests {
         genericRecord.put("en", GenericData.get().createEnum("b", schema.getField("en").schema()));
         genericRecord.put("array", new String[] {"toto"});
         genericRecord.put("map", ImmutableMap.of("a",10));
-        JsonNode jsonNode = JsonConverter.toJson(genericRecord);
+        JsonNode jsonNode = JsonConverter.toJson(ElasticSearchConfig.load(ImmutableMap.of()), genericRecord);
         assertEquals(jsonNode.get("n"), NullNode.getInstance());
         assertEquals(jsonNode.get("l").asLong(), 1L);
         assertEquals(jsonNode.get("i").asInt(), 1);
@@ -87,25 +87,8 @@ public class JsonConverterTests {
     }
 
     @Test
-    public void testLogicalTypesToJson() {
-        org.apache.avro.Schema decimalType  = new LogicalType("cql_decimal").addToSchema(
-                org.apache.avro.SchemaBuilder.record("record")
-                        .fields()
-                        .name("bigint").type().bytesType().noDefault()
-                        .name("scale").type().intType().noDefault()
-                        .endRecord()
-        );
-        org.apache.avro.Schema varintType  = new LogicalType("cql_varint").addToSchema(
-                org.apache.avro.Schema.create(org.apache.avro.Schema.Type.BYTES)
-        );
-        org.apache.avro.Schema durationType  = new LogicalType("cql_duration").addToSchema(
-                org.apache.avro.SchemaBuilder.record("record")
-                        .fields()
-                        .name("months").type().intType().noDefault()
-                        .name("days").type().intType().noDefault()
-                        .name("nanoseconds").type().longType().noDefault()
-                        .endRecord()
-        );
+    public void testLogicalTypesToJson() throws IOException
+    {
         Schema dateType = LogicalTypes.date().addToSchema(Schema.create(Schema.Type.INT));
         Schema timestampMillisType = LogicalTypes.timestampMillis().addToSchema(Schema.create(Schema.Type.LONG));
         Schema timestampMicrosType = LogicalTypes.timestampMicros().addToSchema(Schema.create(Schema.Type.LONG));
@@ -114,15 +97,12 @@ public class JsonConverterTests {
         Schema uuidType = LogicalTypes.uuid().addToSchema(Schema.create(Schema.Type.STRING));
         Schema schema = SchemaBuilder.record("record")
                 .fields()
-                .name("amount").type(decimalType).noDefault()
                 .name("mydate").type(dateType).noDefault()
                 .name("tsmillis").type(timestampMillisType).noDefault()
                 .name("tsmicros").type(timestampMicrosType).noDefault()
                 .name("timemillis").type(timeMillisType).noDefault()
                 .name("timemicros").type(timeMicrosType).noDefault()
                 .name("myuuid").type(uuidType).noDefault()
-                .name("myvarint").type(varintType).noDefault()
-                .name("myduration").type(durationType).noDefault()
                 .endRecord();
 
         final long MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -130,37 +110,56 @@ public class JsonConverterTests {
         UUID myUuid = UUID.randomUUID();
         Calendar calendar = new GregorianCalendar(TimeZone.getTimeZone("Europe/Copenhagen"));
 
-        GenericRecord myDecimal = new GenericData.Record(decimalType);
-        myDecimal.put("bigint", BigInteger.valueOf(123).toByteArray());
-        myDecimal.put("scale", 2);
-
-        GenericRecord myduration = new GenericData.Record(durationType);
-        myduration.put("months", 5);
-        myduration.put("days", 2);
-        myduration.put("nanoseconds", 1000 * 1000 * 1000 * 30L); // 30 seconds
-
         GenericRecord genericRecord = new GenericData.Record(schema);
-        genericRecord.put("amount", myDecimal);
         genericRecord.put("mydate", (int)calendar.toInstant().getEpochSecond());
         genericRecord.put("tsmillis", calendar.getTimeInMillis());
         genericRecord.put("tsmicros", calendar.getTimeInMillis() * 1000);
         genericRecord.put("timemillis", (int)(calendar.getTimeInMillis() % MILLIS_PER_DAY));
         genericRecord.put("timemicros", (calendar.getTimeInMillis() %MILLIS_PER_DAY) * 1000);
         genericRecord.put("myuuid", myUuid.toString());
-        genericRecord.put("myvarint", BigInteger.valueOf(12234).toByteArray());
-        genericRecord.put("myduration", myduration);
 
-        JsonNode jsonNode = JsonConverter.toJson(genericRecord);
-        assertEquals(jsonNode.get("amount").asText(), "1.23");
-        assertEquals(jsonNode.get("myvarint").asLong(), 12234);
+        JsonNode jsonNode = JsonConverter.toJson(ElasticSearchConfig.load(ImmutableMap.of()), genericRecord);
         assertEquals(jsonNode.get("mydate").asInt(), calendar.toInstant().getEpochSecond());
         assertEquals(jsonNode.get("tsmillis").asInt(), (int)calendar.getTimeInMillis());
         assertEquals(jsonNode.get("tsmicros").asLong(), calendar.getTimeInMillis() * 1000);
         assertEquals(jsonNode.get("timemillis").asInt(), (int)(calendar.getTimeInMillis() % MILLIS_PER_DAY));
         assertEquals(jsonNode.get("timemicros").asLong(), (calendar.getTimeInMillis() %MILLIS_PER_DAY) * 1000);
-        assertEquals(jsonNode.get("myduration").get("months").asInt(), 5);
-        assertEquals(jsonNode.get("myduration").get("days").asInt(), 2);
-        assertEquals(jsonNode.get("myduration").get("nanoseconds").asLong(), 30000000000L);
         assertEquals(UUID.fromString(jsonNode.get("myuuid").asText()), myUuid);
+    }
+
+    @Test
+    public void testUnsupportedLogicalTypeFails() throws IOException
+    {
+        ElasticSearchConfig elasticSearchConfig = ElasticSearchConfig.load(ImmutableMap.of("ignoreUnsupportedFields", false));
+        org.apache.avro.Schema varintType  = new LogicalType("cql_varint").addToSchema(
+                org.apache.avro.Schema.create(org.apache.avro.Schema.Type.BYTES)
+        );
+        Schema schema = SchemaBuilder.record("record")
+                .fields()
+                .name("myvarint").type(varintType).noDefault()
+                .endRecord();
+
+        GenericRecord genericRecord = new GenericData.Record(schema);
+        genericRecord.put("myvarint", BigInteger.valueOf(12234).toByteArray());
+        assertThrows(UnsupportedOperationException.class, () -> JsonConverter.toJson(elasticSearchConfig, genericRecord));
+    }
+
+    @Test
+    public void testUnsupportedLogicalTypeIgnore() throws IOException
+    {
+        ElasticSearchConfig elasticSearchConfig = ElasticSearchConfig.load(ImmutableMap.of("ignoreUnsupportedFields", true));
+        org.apache.avro.Schema varintType  = new LogicalType("cql_varint").addToSchema(
+                org.apache.avro.Schema.create(org.apache.avro.Schema.Type.BYTES)
+        );
+        Schema schema = SchemaBuilder.record("record")
+                .fields()
+                .name("myvarint").type(varintType).noDefault()
+                .endRecord();
+
+        GenericRecord genericRecord = new GenericData.Record(schema);
+        BigInteger bigInteger = BigInteger.valueOf(12234);
+        genericRecord.put("myvarint", bigInteger.toByteArray());
+        JsonNode jsonNode = JsonConverter.toJson(elasticSearchConfig, genericRecord);
+        assertEquals(jsonNode.get("myvarint"), new BinaryNode(bigInteger.toByteArray()));
     }
 }

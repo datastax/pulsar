@@ -27,8 +27,6 @@ import org.apache.avro.generic.GenericEnumSymbol;
 import org.apache.avro.generic.GenericFixed;
 import org.apache.avro.generic.GenericRecord;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.*;
 
 /**
@@ -46,23 +44,27 @@ public class JsonConverter {
         return objectNode;
     }
 
-    public static JsonNode toJson(GenericRecord genericRecord) {
+    public static JsonNode toJson(ElasticSearchConfig elasticSearchConfig, GenericRecord genericRecord) {
         if (genericRecord == null) {
             return null;
         }
         ObjectNode objectNode = jsonNodeFactory.objectNode();
         for(Schema.Field field: genericRecord.getSchema().getFields()) {
-            objectNode.set(field.name(), toJson(field.schema(), genericRecord.get(field.name())));
+            objectNode.set(field.name(), toJson(elasticSearchConfig, field.schema(), genericRecord.get(field.name())));
         }
         return objectNode;
     }
 
-    public static JsonNode toJson(Schema schema, Object value) {
+    public static JsonNode toJson(ElasticSearchConfig elasticSearchConfig, Schema schema, Object value) {
         if (value == null) {
             return jsonNodeFactory.nullNode();
         }
-        if (schema.getLogicalType() != null && logicalTypeConverters.containsKey(schema.getLogicalType().getName())) {
-            return logicalTypeConverters.get(schema.getLogicalType().getName()).toJson(schema, value);
+        if (schema.getLogicalType() != null) {
+            if (logicalTypeConverters.containsKey(schema.getLogicalType().getName())) {
+                return logicalTypeConverters.get(schema.getLogicalType().getName()).toJson(schema, value);
+            } else if (!elasticSearchConfig.isIgnoreUnsupportedFields()) {
+                throw new UnsupportedOperationException("Unknown AVRO logical type=" + schema.getType());
+            }
         }
         try {
             switch (schema.getType()) {
@@ -86,7 +88,7 @@ public class JsonConverter {
                     Schema elementSchema = schema.getElementType();
                     ArrayNode arrayNode = jsonNodeFactory.arrayNode();
                     for (Object elem : (Object[]) value) {
-                        JsonNode fieldValue = toJson(elementSchema, elem);
+                        JsonNode fieldValue = toJson(elasticSearchConfig, elementSchema, elem);
                         arrayNode.add(fieldValue);
                     }
                     return arrayNode;
@@ -95,26 +97,30 @@ public class JsonConverter {
                     Map<String, Object> map = (Map<String, Object>) value;
                     ObjectNode objectNode = jsonNodeFactory.objectNode();
                     for (Map.Entry<String, Object> entry : map.entrySet()) {
-                        JsonNode jsonNode = toJson(schema.getValueType(), entry.getValue());
+                        JsonNode jsonNode = toJson(elasticSearchConfig, schema.getValueType(), entry.getValue());
                         objectNode.set(entry.getKey(), jsonNode);
                     }
                     return objectNode;
                 }
                 case RECORD:
-                    return toJson((GenericRecord) value);
+                    return toJson(elasticSearchConfig, (GenericRecord) value);
                 case UNION:
                     for (Schema s : schema.getTypes()) {
                         if (s.getType() == Schema.Type.NULL)
                             continue;
-                        return toJson(s, value);
+                        return toJson(elasticSearchConfig, s, value);
                     }
                     // this case should not happen
                     return jsonNodeFactory.textNode(value.toString());
                 case ENUM: // GenericEnumSymbol
                 case STRING:  // can be a String or org.apache.avro.util.Utf8
                     return jsonNodeFactory.textNode(value.toString());
-                default: // do not fail the write
-                    throw new UnsupportedOperationException("Unknown AVRO schema type=" + schema.getType());
+                default:
+                    if (!elasticSearchConfig.isIgnoreUnsupportedFields()) {
+                        throw new UnsupportedOperationException("Unknown AVRO schema type=" + schema.getType());
+                    } else {
+                        return jsonNodeFactory.nullNode();
+                    }
             }
         } catch (ClassCastException error) {
             throw new IllegalArgumentException("Error while converting a value of type " + value.getClass() + " to a " + schema.getType()
@@ -123,7 +129,6 @@ public class JsonConverter {
     }
 
     abstract static class LogicalTypeConverter {
-
         abstract JsonNode toJson(Schema schema, Object value);
     }
 
@@ -137,26 +142,6 @@ public class JsonConverter {
     }
 
     static {
-        logicalTypeConverters.put("cql_varint", new JsonConverter.LogicalTypeConverter() {
-            @Override
-            JsonNode toJson(Schema schema, Object value) {
-                checkType(value, "cql_varint", byte[].class);
-                return jsonNodeFactory.numberNode(new BigInteger((byte[]) value));
-            }
-        });
-        logicalTypeConverters.put("cql_decimal", new JsonConverter.LogicalTypeConverter() {
-            @Override
-            JsonNode toJson(Schema schema, Object value) {
-                checkType(value, "cql_decimal", GenericRecord.class);
-                GenericRecord record = (GenericRecord) value;
-                Object bigint = record.get("bigint");
-                checkType(bigint, "cql_decimal - bigint", byte[].class);
-                Object scale = record.get("scale");
-                checkType(scale, "cql_decimal - scale", Integer.class);
-                BigInteger asBigint =  new BigInteger((byte[]) record.get("bigint"));
-                return jsonNodeFactory.numberNode(new BigDecimal(asBigint, (Integer) scale));
-            }
-        });
         logicalTypeConverters.put("date", new JsonConverter.LogicalTypeConverter() {
             @Override
             JsonNode toJson(Schema schema, Object value) {
@@ -216,5 +201,4 @@ public class JsonConverter {
         }
         return arrayNode;
     }
-
 }
