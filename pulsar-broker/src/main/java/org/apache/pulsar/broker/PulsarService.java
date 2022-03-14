@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,6 +59,8 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import javax.servlet.ServletException;
+import javax.websocket.DeploymentException;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -103,8 +106,8 @@ import org.apache.pulsar.broker.service.TopicPoliciesService;
 import org.apache.pulsar.broker.service.TransactionBufferSnapshotService;
 import org.apache.pulsar.broker.service.schema.SchemaRegistryService;
 import org.apache.pulsar.broker.stats.MetricsGenerator;
-import org.apache.pulsar.broker.stats.prometheus.PrometheusMetricsServlet;
 import org.apache.pulsar.broker.stats.prometheus.PrometheusRawMetricsProvider;
+import org.apache.pulsar.broker.stats.prometheus.PulsarPrometheusMetricsServlet;
 import org.apache.pulsar.broker.storage.ManagedLedgerStorage;
 import org.apache.pulsar.broker.transaction.buffer.TransactionBufferProvider;
 import org.apache.pulsar.broker.transaction.buffer.impl.TransactionBufferClientImpl;
@@ -115,6 +118,7 @@ import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.admin.PulsarAdminBuilder;
 import org.apache.pulsar.client.api.AuthenticationFactory;
 import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.transaction.TransactionBufferClient;
 import org.apache.pulsar.client.impl.PulsarClientImpl;
 import org.apache.pulsar.client.impl.conf.ClientConfigurationData;
@@ -238,7 +242,7 @@ public class PulsarService implements AutoCloseable {
 
     // packages management service
     private PackagesManagement packagesManagement;
-    private PrometheusMetricsServlet metricsServlet;
+    private PulsarPrometheusMetricsServlet metricsServlet;
     private List<PrometheusRawMetricsProvider> pendingMetricsProviders;
 
     private MetadataStoreExtended localMetadataStore;
@@ -367,7 +371,7 @@ public class PulsarService implements AutoCloseable {
                 }
             }
 
-            metricsServlet = null;
+            resetMetricsServlet();
 
             if (this.webSocketService != null) {
                 this.webSocketService.close();
@@ -519,6 +523,10 @@ public class PulsarService implements AutoCloseable {
         }
     }
 
+    private synchronized void resetMetricsServlet() {
+        metricsServlet = null;
+    }
+
     private CompletableFuture<Void> addTimeoutHandling(CompletableFuture<Void> future) {
         ScheduledExecutorService shutdownExecutor = Executors.newSingleThreadScheduledExecutor(
                 new DefaultThreadFactory(getClass().getSimpleName() + "-shutdown"));
@@ -654,71 +662,13 @@ public class PulsarService implements AutoCloseable {
             brokerService.start();
 
             this.webService = new WebService(this);
-            Map<String, Object> attributeMap = Maps.newHashMap();
-            attributeMap.put(WebService.ATTRIBUTE_PULSAR_NAME, this);
-            Map<String, Object> vipAttributeMap = Maps.newHashMap();
-            vipAttributeMap.put(VipStatus.ATTRIBUTE_STATUS_FILE_PATH, this.config.getStatusFilePath());
-            vipAttributeMap.put(VipStatus.ATTRIBUTE_IS_READY_PROBE, new Supplier<Boolean>() {
-                @Override
-                public Boolean get() {
-                    // Ensure the VIP status is only visible when the broker is fully initialized
-                    return state == State.Started;
-                }
-            });
-            this.webService.addRestResources("/",
-                    VipStatus.class.getPackage().getName(), false, vipAttributeMap);
-            this.webService.addRestResources("/",
-                    "org.apache.pulsar.broker.web", false, attributeMap);
-            this.webService.addRestResources("/admin",
-                    "org.apache.pulsar.broker.admin.v1", true, attributeMap);
-            this.webService.addRestResources("/admin/v2",
-                    "org.apache.pulsar.broker.admin.v2", true, attributeMap);
-            this.webService.addRestResources("/admin/v3",
-                    "org.apache.pulsar.broker.admin.v3", true, attributeMap);
-            this.webService.addRestResources("/lookup",
-                    "org.apache.pulsar.broker.lookup", true, attributeMap);
-            this.metricsServlet = new PrometheusMetricsServlet(
-                    this, config.isExposeTopicLevelMetricsInPrometheus(),
-                    config.isExposeConsumerLevelMetricsInPrometheus(),
-                    config.isExposeProducerLevelMetricsInPrometheus(),
-                    config.isSplitTopicAndPartitionLabelInPrometheus());
-            if (pendingMetricsProviders != null) {
-                pendingMetricsProviders.forEach(provider -> metricsServlet.addRawMetricsProvider(provider));
-                this.pendingMetricsProviders = null;
-            }
 
-            this.webService.addServlet("/metrics",
-                    new ServletHolder(metricsServlet),
-                    false, attributeMap);
+            createMetricsServlet();
+            this.addWebServerHandlers(webService, metricsServlet, this.config);
 
-            if (config.isWebSocketServiceEnabled()) {
-                // Use local broker address to avoid different IP address when using a VIP for service discovery
-                this.webSocketService = new WebSocketService(null, config);
-                this.webSocketService.start();
-
-                final WebSocketServlet producerWebSocketServlet = new WebSocketProducerServlet(webSocketService);
-                this.webService.addServlet(WebSocketProducerServlet.SERVLET_PATH,
-                        new ServletHolder(producerWebSocketServlet), true, attributeMap);
-                this.webService.addServlet(WebSocketProducerServlet.SERVLET_PATH_V2,
-                        new ServletHolder(producerWebSocketServlet), true, attributeMap);
-
-                final WebSocketServlet consumerWebSocketServlet = new WebSocketConsumerServlet(webSocketService);
-                this.webService.addServlet(WebSocketConsumerServlet.SERVLET_PATH,
-                        new ServletHolder(consumerWebSocketServlet), true, attributeMap);
-                this.webService.addServlet(WebSocketConsumerServlet.SERVLET_PATH_V2,
-                        new ServletHolder(consumerWebSocketServlet), true, attributeMap);
-
-                final WebSocketServlet readerWebSocketServlet = new WebSocketReaderServlet(webSocketService);
-                this.webService.addServlet(WebSocketReaderServlet.SERVLET_PATH,
-                        new ServletHolder(readerWebSocketServlet), true, attributeMap);
-                this.webService.addServlet(WebSocketReaderServlet.SERVLET_PATH_V2,
-                        new ServletHolder(readerWebSocketServlet), true, attributeMap);
-
-                final WebSocketServlet pingPongWebSocketServlet = new WebSocketPingPongServlet(webSocketService);
-                this.webService.addServlet(WebSocketPingPongServlet.SERVLET_PATH,
-                        new ServletHolder(pingPongWebSocketServlet), true, attributeMap);
-                this.webService.addServlet(WebSocketPingPongServlet.SERVLET_PATH_V2,
-                        new ServletHolder(pingPongWebSocketServlet), true, attributeMap);
+            // Refresh addresses and update configuration, since the port might have been dynamically assigned
+            if (config.getBrokerServicePort().equals(Optional.of(0))) {
+                config.setBrokerServicePort(brokerService.getListenPort());
             }
 
             if (LOG.isDebugEnabled()) {
@@ -827,6 +777,100 @@ public class PulsarService implements AutoCloseable {
             throw new PulsarServerException(e);
         } finally {
             mutex.unlock();
+        }
+    }
+
+    private synchronized void createMetricsServlet() {
+        this.metricsServlet = new PulsarPrometheusMetricsServlet(
+                this, config.isExposeTopicLevelMetricsInPrometheus(),
+                config.isExposeConsumerLevelMetricsInPrometheus(),
+                config.isExposeProducerLevelMetricsInPrometheus(),
+                config.isSplitTopicAndPartitionLabelInPrometheus());
+        if (pendingMetricsProviders != null) {
+            pendingMetricsProviders.forEach(provider -> metricsServlet.addRawMetricsProvider(provider));
+            this.pendingMetricsProviders = null;
+        }
+    }
+
+    private void addWebServerHandlers(WebService webService,
+                                      PulsarPrometheusMetricsServlet metricsServlet,
+                                      ServiceConfiguration config)
+            throws PulsarServerException, PulsarClientException, MalformedURLException, ServletException,
+            DeploymentException {
+        Map<String, Object> attributeMap = Maps.newHashMap();
+        attributeMap.put(WebService.ATTRIBUTE_PULSAR_NAME, this);
+
+        Map<String, Object> vipAttributeMap = Maps.newHashMap();
+        vipAttributeMap.put(VipStatus.ATTRIBUTE_STATUS_FILE_PATH, config.getStatusFilePath());
+        vipAttributeMap.put(VipStatus.ATTRIBUTE_IS_READY_PROBE, (Supplier<Boolean>) () -> {
+            // Ensure the VIP status is only visible when the broker is fully initialized
+            return state == State.Started;
+        });
+        // Add admin rest resources
+        webService.addRestResources("/",
+                VipStatus.class.getPackage().getName(), false, vipAttributeMap);
+        webService.addRestResources("/",
+                "org.apache.pulsar.broker.web", false, attributeMap);
+        webService.addRestResources("/admin",
+                "org.apache.pulsar.broker.admin.v1", true, attributeMap);
+        webService.addRestResources("/admin/v2",
+                "org.apache.pulsar.broker.admin.v2", true, attributeMap);
+        webService.addRestResources("/admin/v3",
+                "org.apache.pulsar.broker.admin.v3", true, attributeMap);
+        webService.addRestResources("/lookup",
+                "org.apache.pulsar.broker.lookup", true, attributeMap);
+        webService.addRestResources("/topics",
+                            "org.apache.pulsar.broker.rest", true, attributeMap);
+
+        // Add metrics servlet
+        webService.addServlet("/metrics",
+                new ServletHolder(metricsServlet),
+                false, attributeMap);
+
+        // Add websocket service
+        addWebSocketServiceHandler(webService, attributeMap, config);
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Attempting to add static directory");
+        }
+        // Add static resources
+        webService.addStaticResources("/static", "/static");
+
+    }
+
+    private void addWebSocketServiceHandler(WebService webService,
+                                            Map<String, Object> attributeMap,
+                                            ServiceConfiguration config)
+            throws PulsarServerException, PulsarClientException, MalformedURLException, ServletException,
+            DeploymentException {
+        if (config.isWebSocketServiceEnabled()) {
+            // Use local broker address to avoid different IP address when using a VIP for service discovery
+            this.webSocketService = new WebSocketService(null, config);
+            this.webSocketService.start();
+
+            final WebSocketServlet producerWebSocketServlet = new WebSocketProducerServlet(webSocketService);
+            webService.addServlet(WebSocketProducerServlet.SERVLET_PATH,
+                    new ServletHolder(producerWebSocketServlet), true, attributeMap);
+            webService.addServlet(WebSocketProducerServlet.SERVLET_PATH_V2,
+                    new ServletHolder(producerWebSocketServlet), true, attributeMap);
+
+            final WebSocketServlet consumerWebSocketServlet = new WebSocketConsumerServlet(webSocketService);
+            webService.addServlet(WebSocketConsumerServlet.SERVLET_PATH,
+                    new ServletHolder(consumerWebSocketServlet), true, attributeMap);
+            webService.addServlet(WebSocketConsumerServlet.SERVLET_PATH_V2,
+                    new ServletHolder(consumerWebSocketServlet), true, attributeMap);
+
+            final WebSocketServlet readerWebSocketServlet = new WebSocketReaderServlet(webSocketService);
+            webService.addServlet(WebSocketReaderServlet.SERVLET_PATH,
+                    new ServletHolder(readerWebSocketServlet), true, attributeMap);
+            webService.addServlet(WebSocketReaderServlet.SERVLET_PATH_V2,
+                    new ServletHolder(readerWebSocketServlet), true, attributeMap);
+
+            final WebSocketServlet pingPongWebSocketServlet = new WebSocketPingPongServlet(webSocketService);
+            webService.addServlet(WebSocketPingPongServlet.SERVLET_PATH,
+                    new ServletHolder(pingPongWebSocketServlet), true, attributeMap);
+            webService.addServlet(WebSocketPingPongServlet.SERVLET_PATH_V2,
+                    new ServletHolder(pingPongWebSocketServlet), true, attributeMap);
         }
     }
 
@@ -1468,7 +1512,7 @@ public class PulsarService implements AutoCloseable {
         return resourceUsageTransportManager;
     }
 
-    public void addPrometheusRawMetricsProvider(PrometheusRawMetricsProvider metricsProvider) {
+    public synchronized void addPrometheusRawMetricsProvider(PrometheusRawMetricsProvider metricsProvider) {
         if (metricsServlet == null) {
             if (pendingMetricsProviders == null) {
                 pendingMetricsProviders = new LinkedList<>();

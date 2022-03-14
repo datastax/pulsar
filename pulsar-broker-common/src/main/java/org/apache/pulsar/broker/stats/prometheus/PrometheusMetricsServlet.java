@@ -18,8 +18,10 @@
  */
 package org.apache.pulsar.broker.stats.prometheus;
 
-import static org.apache.bookkeeper.mledger.util.SafeRun.safeRun;
+import static org.apache.bookkeeper.util.SafeRunnable.safeRun;
 import io.netty.util.concurrent.DefaultThreadFactory;
+
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
@@ -27,36 +29,28 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletException;
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import org.apache.pulsar.broker.PulsarService;
-import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class PrometheusMetricsServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
+    private static final int HTTP_STATUS_OK_200 = 200;
+    private static final int HTTP_STATUS_INTERNAL_SERVER_ERROR_500 = 500;
 
-    private final PulsarService pulsar;
-    private final boolean shouldExportTopicMetrics;
-    private final boolean shouldExportConsumerMetrics;
-    private final boolean shouldExportProducerMetrics;
     private final long metricsServletTimeoutMs;
-    private final boolean splitTopicAndPartitionLabel;
-    private List<PrometheusRawMetricsProvider> metricsProviders;
+    private final String cluster;
+    protected List<PrometheusRawMetricsProvider> metricsProviders;
 
     private ExecutorService executor = null;
 
-    public PrometheusMetricsServlet(PulsarService pulsar, boolean includeTopicMetrics, boolean includeConsumerMetrics,
-                                    boolean shouldExportProducerMetrics, boolean splitTopicAndPartitionLabel) {
-        this.pulsar = pulsar;
-        this.shouldExportTopicMetrics = includeTopicMetrics;
-        this.shouldExportConsumerMetrics = includeConsumerMetrics;
-        this.shouldExportProducerMetrics = shouldExportProducerMetrics;
-        this.metricsServletTimeoutMs = pulsar.getConfiguration().getMetricsServletTimeoutMs();
-        this.splitTopicAndPartitionLabel = splitTopicAndPartitionLabel;
+    public PrometheusMetricsServlet(long metricsServletTimeoutMs, String cluster) {
+        this.metricsServletTimeoutMs = metricsServletTimeoutMs;
+        this.cluster = cluster;
     }
 
     @Override
@@ -65,26 +59,45 @@ public class PrometheusMetricsServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) {
         AsyncContext context = request.startAsync();
         context.setTimeout(metricsServletTimeoutMs);
+        long start = System.currentTimeMillis();
         executor.execute(safeRun(() -> {
             HttpServletResponse res = (HttpServletResponse) context.getResponse();
             try {
-                res.setStatus(HttpStatus.OK_200);
+                res.setStatus(HTTP_STATUS_OK_200);
                 res.setContentType("text/plain");
-                PrometheusMetricsGenerator.generate(pulsar, shouldExportTopicMetrics, shouldExportConsumerMetrics,
-                        shouldExportProducerMetrics, splitTopicAndPartitionLabel, res.getOutputStream(),
-                        metricsProviders);
-                context.complete();
-
+                generateMetrics(cluster, res.getOutputStream());
             } catch (Exception e) {
-                log.error("Failed to generate prometheus stats", e);
-                res.setStatus(HttpStatus.INTERNAL_SERVER_ERROR_500);
-                context.complete();
+                long end = System.currentTimeMillis();
+                long time = end - start;
+                if (e instanceof EOFException) {
+                    // NO STACKTRACE
+                    log.error("Failed to send metrics, "
+                            + "likely the client or this server closed "
+                            + "the connection due to a timeout ({} ms elapsed): {}", time, e + "");
+                } else {
+                    log.error("Failed to generate prometheus stats, {} ms elapsed", time, e);
+                }
+                res.setStatus(HTTP_STATUS_INTERNAL_SERVER_ERROR_500);
+            } finally {
+                long end = System.currentTimeMillis();
+                long time = end - start;
+                try {
+                    context.complete();
+                } catch (IllegalStateException e) {
+                    // this happens when metricsServletTimeoutMs expires
+                    // java.lang.IllegalStateException: AsyncContext completed and/or Request lifecycle recycled
+                    log.error("Failed to generate prometheus stats, "
+                            + "this is likely due to metricsServletTimeoutMs: {} ms elapsed: {}", time, e + "");
+                }
             }
         }));
+    }
+
+    protected void generateMetrics(String cluster, ServletOutputStream outputStream) throws IOException {
+        PrometheusMetricsGeneratorUtils.generate(cluster, outputStream, metricsProviders);
     }
 
     @Override
