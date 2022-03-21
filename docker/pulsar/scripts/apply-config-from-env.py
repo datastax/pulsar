@@ -28,7 +28,7 @@
 import os, sys
 
 if len(sys.argv) < 2:
-    print('Usage: %s' % (sys.argv[0]))
+    print('Usage: %s [file1.conf] [file2.conf] ...' % (sys.argv[0]))
     sys.exit(1)
 
 # Always apply env config to env scripts as well
@@ -59,7 +59,7 @@ for conf_filename in conf_files:
 
     # Update values from Env
     for k in sorted(os.environ.keys()):
-        v = os.environ[k].strip()
+        v = os.environ[k].strip().strip('\"')
 
         # Hide the value in logs if is password.
         if "password" in k:
@@ -70,18 +70,17 @@ for conf_filename in conf_files:
         if k.startswith(PF_ENV_PREFIX):
             k = k[len(PF_ENV_PREFIX):]
         if k in keys:
-            print('[%s] Applying config %s = %s' % (conf_filename, k, displayValue))
+            print('[%s] Applying config %s = "%s"' % (conf_filename, k, displayValue))
             idx = keys[k]
-            lines[idx] = '%s=%s\n' % (k, v)
-
+            lines[idx] = '%s="%s"\n' % (k, v)
 
     # Ensure we have a new-line at the end of the file, to avoid issue
     # when appending more lines to the config
     lines.append('\n')
-    
+
     # Add new keys from Env    
     for k in sorted(os.environ.keys()):
-        v = os.environ[k]
+        v = os.environ[k].strip('\"')
         if not k.startswith(PF_ENV_PREFIX):
             continue
 
@@ -93,11 +92,11 @@ for conf_filename in conf_files:
 
         k = k[len(PF_ENV_PREFIX):]
         if k not in keys:
-            print('[%s] Adding config %s = %s' % (conf_filename, k, displayValue))
-            lines.append('%s=%s\n' % (k, v))
+            print('[%s] Adding config %s = "%s"' % (conf_filename, k, displayValue))
+            lines.append('%s="%s"\n' % (k, v))
         else:
-            print('[%s] Updating config %s = %s' % (conf_filename, k, displayValue))
-            lines[keys[k]] = '%s=%s\n' % (k, v)
+            print('[%s] Updating config %s = "%s"' % (conf_filename, k, displayValue))
+            lines[keys[k]] = '%s="%s"\n' % (k, v)
 
 
     # Store back the updated config in the same file
@@ -105,4 +104,3 @@ for conf_filename in conf_files:
     for line in lines:
         f.write(line)
     f.close()
-
