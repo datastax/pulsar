@@ -52,6 +52,14 @@ public abstract class BaseKinesisConfig implements Serializable {
     )
     private String awsRegion = "";
 
+
+    @FieldDoc(
+            required = false,
+            defaultValue = "false",
+            help = "Tell to Kinesis Client to skip certificate validation. This is useful while performing local tests, it's recommended to always validate certificate in production environment."
+    )
+    private Boolean skipCertificateValidation = false;
+
     @FieldDoc(
         required = true,
         defaultValue = "",

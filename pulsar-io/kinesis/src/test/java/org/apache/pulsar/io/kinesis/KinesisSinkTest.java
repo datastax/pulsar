@@ -116,6 +116,7 @@ public class KinesisSinkTest {
         Map<String, Object> map = new HashMap<>();
         map.put("awsEndpoint", endpointOverride.getHost());
         map.put("awsEndpointPort", endpointOverride.getPort());
+        map.put("skipCertificateValidation", true);
         map.put("awsKinesisStreamName", STREAM_NAME);
         map.put("awsRegion", "us-east-1");
         map.put("awsCredentialPluginParam", "{\"accessKey\":\"access\",\"secretKey\":\"secret\"}");

@@ -41,7 +41,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 
 @Slf4j
@@ -66,6 +65,7 @@ public class KinesisSinkTester extends SinkTester<LocalStackContainer> {
         final URI endpointOverride = localStackContainer.getEndpointOverride(LocalStackContainer.Service.KINESIS);
         sinkConfig.put("awsEndpoint", NAME);
         sinkConfig.put("awsEndpointPort", endpointOverride.getPort());
+        sinkConfig.put("skipCertificateValidation", true);
         client = KinesisAsyncClient.builder().credentialsProvider(new AwsCredentialsProvider() {
                     @Override
                     public AwsCredentials resolveCredentials() {
