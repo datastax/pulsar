@@ -129,6 +129,7 @@ functionRuntimeFactoryConfigs:
 #### Additional JVM tuning (only process and Kubernetes runtime) ####
 #   This arguments will be added to the command line execution of 'java'
 #additionalJavaRuntimeArguments: ['-XX:+ExitOnOutOfMemoryError']
+additionalJavaRuntimeArguments: ['-Dcom.amazonaws.sdk.disableCertChecking']
 
 #### Thread Runtime ####
 # Pulsar function instances are run as threads

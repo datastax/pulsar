@@ -164,10 +164,14 @@ public class KinesisSink extends AbstractAwsConnector implements Sink<byte[]> {
 
         KinesisProducerConfiguration kinesisConfig = new KinesisProducerConfiguration();
         kinesisConfig.setKinesisEndpoint(kinesisSinkConfig.getAwsEndpoint());
+        if (kinesisSinkConfig.getAwsEndpointPort() != null) {
+            kinesisConfig.setKinesisPort(kinesisSinkConfig.getAwsEndpointPort());
+        }
         kinesisConfig.setRegion(kinesisSinkConfig.getAwsRegion());
         kinesisConfig.setThreadingModel(ThreadingModel.POOLED);
         kinesisConfig.setThreadPoolSize(4);
         kinesisConfig.setCollectionMaxCount(1);
+        kinesisConfig.setVerifyCertificate(false);
         AWSCredentialsProvider credentialsProvider = createCredentialProvider(
                 kinesisSinkConfig.getAwsCredentialPluginName(),
                 kinesisSinkConfig.getAwsCredentialPluginParam())
