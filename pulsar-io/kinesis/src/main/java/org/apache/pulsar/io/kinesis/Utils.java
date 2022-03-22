@@ -66,8 +66,7 @@ public class Utils {
 
     public static ByteBuffer serializeRecordToFlatBuffer(FlatBufferBuilder builder, Record<byte[]> record) {
         checkNotNull(record, "record-context can't be null");
-        final org.apache.pulsar.client.api.Message<byte[]> recordMessage =
-                record
+        final org.apache.pulsar.client.api.Message<byte[]> recordMessage = record
                         .getMessage()
                         .orElseThrow(() -> new IllegalArgumentException("record message must be present"));
         final Optional<EncryptionContext> encryptionCtx = recordMessage.getEncryptionCtx();
@@ -172,8 +171,7 @@ public class Utils {
      */
     public static String serializeRecordToJson(Record<byte[]> record) {
         checkNotNull(record, "record can't be null");
-        final org.apache.pulsar.client.api.Message<byte[]> recordMessage =
-                record
+        final org.apache.pulsar.client.api.Message<byte[]> recordMessage = record
                         .getMessage()
                         .orElseThrow(() -> new IllegalArgumentException("record message must be present"));
 
