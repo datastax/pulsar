@@ -22,7 +22,6 @@ import lombok.SneakyThrows;
 import org.apache.pulsar.functions.api.Record;
 import org.apache.pulsar.io.core.SinkContext;
 import org.awaitility.Awaitility;
-import org.jetbrains.annotations.NotNull;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -110,7 +109,6 @@ public class KinesisSinkTest {
         }
     }
 
-    @NotNull
     private Map<String, Object> createConfig() {
         final URI endpointOverride = LOCALSTACK_CONTAINER.getEndpointOverride(LocalStackContainer.Service.KINESIS);
         Map<String, Object> map = new HashMap<>();

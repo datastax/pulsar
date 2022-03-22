@@ -31,7 +31,6 @@ import java.util.Optional;
 
 import org.apache.pulsar.common.api.EncryptionContext;
 import org.apache.pulsar.functions.api.Record;
-import org.apache.pulsar.functions.source.RecordWithEncryptionContext;
 import org.apache.pulsar.io.kinesis.fbs.EncryptionCtx;
 import org.apache.pulsar.io.kinesis.fbs.EncryptionKey;
 import org.apache.pulsar.io.kinesis.fbs.KeyValue;
@@ -67,10 +66,12 @@ public class Utils {
 
     public static ByteBuffer serializeRecordToFlatBuffer(FlatBufferBuilder builder, Record<byte[]> record) {
         checkNotNull(record, "record-context can't be null");
-        Optional<EncryptionContext> encryptionCtx = (record instanceof RecordWithEncryptionContext)
-                ? ((RecordWithEncryptionContext<byte[]>) record).getEncryptionCtx()
-                : Optional.empty();
-        Map<String, String> properties = record.getProperties();
+        final org.apache.pulsar.client.api.Message<byte[]> recordMessage =
+                record
+                        .getMessage()
+                        .orElseThrow(() -> new IllegalArgumentException("record message must be present"));
+        final Optional<EncryptionContext> encryptionCtx = recordMessage.getEncryptionCtx();
+        final Map<String, String> properties = record.getProperties();
 
         int encryptionCtxOffset = -1;
         int propertiesOffset = -1;
@@ -171,6 +172,10 @@ public class Utils {
      */
     public static String serializeRecordToJson(Record<byte[]> record) {
         checkNotNull(record, "record can't be null");
+        final org.apache.pulsar.client.api.Message<byte[]> recordMessage =
+                record
+                        .getMessage()
+                        .orElseThrow(() -> new IllegalArgumentException("record message must be present"));
 
         JsonObject result = new JsonObject();
         result.addProperty(PAYLOAD_FIELD, getEncoder().encodeToString(record.getValue()));
@@ -181,9 +186,7 @@ public class Utils {
             result.add(PROPERTIES_FIELD, properties);
         }
 
-        Optional<EncryptionContext> optEncryptionCtx = (record instanceof RecordWithEncryptionContext)
-                ? ((RecordWithEncryptionContext<byte[]>) record).getEncryptionCtx()
-                : Optional.empty();
+        final Optional<EncryptionContext> optEncryptionCtx = recordMessage.getEncryptionCtx();
         if (optEncryptionCtx.isPresent()) {
             EncryptionContext encryptionCtx = optEncryptionCtx.get();
             JsonObject encryptionCtxJson = new JsonObject();
