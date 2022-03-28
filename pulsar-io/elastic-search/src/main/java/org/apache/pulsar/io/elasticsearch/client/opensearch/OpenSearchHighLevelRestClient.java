@@ -19,23 +19,19 @@
 
 package org.apache.pulsar.io.elasticsearch.client.opensearch;
 
-import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.json.jackson.JacksonJsonpMapper;
-import co.elastic.clients.transport.ElasticsearchTransport;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpHost;
-import org.apache.pulsar.client.api.schema.GenericObject;
 import org.apache.pulsar.io.elasticsearch.ElasticSearchConfig;
 import org.apache.pulsar.io.elasticsearch.RandomExponentialRetry;
 import org.apache.pulsar.io.elasticsearch.client.BulkProcessor;
 import org.apache.pulsar.io.elasticsearch.client.RestClient;
 import org.elasticsearch.client.Node;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.DocWriteRequest;
 import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.opensearch.action.admin.indices.refresh.RefreshRequest;
-import org.opensearch.action.bulk.BulkItemResponse;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.delete.DeleteRequest;
@@ -63,9 +59,7 @@ import org.opensearch.search.builder.SearchSourceBuilder;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -175,11 +169,18 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
         cireq.settings(Settings.builder()
                 .put("index.number_of_shards", config.getIndexNumberOfShards())
                 .put("index.number_of_replicas", config.getIndexNumberOfReplicas()));
-        CreateIndexResponse resp = client.indices().create(cireq, RequestOptions.DEFAULT);
-        if (!resp.isAcknowledged() || !resp.isShardsAcknowledged()) {
-            throw new IOException("Unable to create index.");
+        try {
+            CreateIndexResponse resp = client.indices().create(cireq, RequestOptions.DEFAULT);
+            if (!resp.isAcknowledged() || !resp.isShardsAcknowledged()) {
+                throw new IOException("Unable to create index.");
+            }
+            return true;
+        } catch (OpenSearchStatusException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("resource_already_exists_exception")) {
+                return false;
+            }
+            throw ex;
         }
-        return true;
     }
 
     @Override

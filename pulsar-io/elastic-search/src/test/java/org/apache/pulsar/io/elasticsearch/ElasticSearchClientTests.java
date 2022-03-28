@@ -173,6 +173,9 @@ public abstract class ElasticSearchClientTests extends ElasticSearchTestBase {
         assertTrue(client.createIndexIfNeeded("mynewindex"));
         assertTrue(client.indexExists("mynewindex"));
         assertFalse(client.createIndexIfNeeded("mynewindex"));
+
+        // if already exists it must not throw exception in order to not re-attempt index creation
+        assertFalse(client.getRestClient().createIndex("mynewindex"));
     }
 
     @Test
