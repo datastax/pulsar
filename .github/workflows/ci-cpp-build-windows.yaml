@@ -21,7 +21,7 @@ name: CI - CPP build on Windows
 on:
   pull_request:
     branches:
-      - 2.8.0_ds
+      - master
     paths:
       - '.github/workflows/**'
       - 'pulsar-client-cpp/**'

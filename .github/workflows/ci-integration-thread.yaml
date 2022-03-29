@@ -21,7 +21,7 @@ name: CI - Integration - Thread
 on:
   pull_request:
     branches:
-      - 2.8.0_ds
+      - master
   push:
     branches:
       - branch-*

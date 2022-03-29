@@ -21,7 +21,7 @@ name: CI - Build - MacOS
 on:
   pull_request:
     branches:
-      - 2.8.0_ds
+      - master
   push:
     branches:
       - branch-*

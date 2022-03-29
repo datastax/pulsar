@@ -36,7 +36,7 @@ on:
   # trigger on every commit to given branches
   push:
     branches:
-      - 2.8.0_ds
+      - master
   # trigger on a schedule so that the cache will be rebuilt if it happens to expire
   schedule:
     - cron: '30 */12 * * *'
