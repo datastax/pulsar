@@ -225,14 +225,15 @@ public abstract class ElasticSearchClientTests extends ElasticSearchTestBase {
                 .setIndexName(index)
                 .setBulkEnabled(true)
                 .setMalformedDocAction(ElasticSearchConfig.MalformedDocAction.IGNORE);
-        ElasticSearchClient client = new ElasticSearchClient(config);
-        MockRecord<GenericObject> mockRecord = new MockRecord<>();
-        client.bulkIndex(mockRecord, Pair.of("1","{\"a\":1}"));
-        client.bulkIndex(mockRecord, Pair.of("2","{\"a\":\"toto\"}"));
-        client.flush();
-        assertNull(client.irrecoverableError.get());
-        assertEquals(mockRecord.acked, 1);
-        assertEquals(mockRecord.failed, 1);
+        try (ElasticSearchClient client = new ElasticSearchClient(config);) {
+            MockRecord<GenericObject> mockRecord = new MockRecord<>();
+            client.bulkIndex(mockRecord, Pair.of("1", "{\"a\":1}"));
+            client.bulkIndex(mockRecord, Pair.of("2", "{\"a\":\"toto\"}"));
+            client.flush();
+            assertNull(client.irrecoverableError.get());
+            assertEquals(mockRecord.acked, 1);
+            assertEquals(mockRecord.failed, 1);
+        }
     }
 
     @Test
@@ -344,6 +345,33 @@ public abstract class ElasticSearchClientTests extends ElasticSearchTestBase {
                     client.getRestClient().deleteIndex(index);
                 }
             }
+        }
+    }
+
+    @Test
+    public void testBulkIndexAndDelete() throws Exception {
+        final String index = "indexbulktest-" + UUID.randomUUID();
+        ElasticSearchConfig config = new ElasticSearchConfig()
+                .setElasticSearchUrl("http://"+container.getHttpHostAddress())
+                .setIndexName(index)
+                .setBulkEnabled(true)
+                .setBulkActions(10)
+                .setBulkFlushIntervalInMs(-1L);
+
+        try (ElasticSearchClient client = new ElasticSearchClient(config)) {
+            assertTrue(client.createIndexIfNeeded(index));
+            MockRecord<GenericObject> mockRecord = new MockRecord<>();
+            for (int i = 0; i < 5; i++) {
+                client.bulkIndex(mockRecord, Pair.of("key" + i, "{\"a\":" + i + "}"));
+                client.bulkDelete(mockRecord, "key" + i);
+            }
+            assertEquals(mockRecord.acked, 10);
+            assertEquals(mockRecord.failed, 0);
+            assertEquals(client.getRestClient().totalHits(index), 0);
+            // no effect
+            client.flush();
+
+            assertEquals(mockRecord.acked, 10);
         }
     }
 

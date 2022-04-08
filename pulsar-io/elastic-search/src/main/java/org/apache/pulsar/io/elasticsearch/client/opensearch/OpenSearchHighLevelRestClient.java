@@ -67,7 +67,11 @@ import java.util.stream.Collectors;
 @Slf4j
 public class OpenSearchHighLevelRestClient extends RestClient implements BulkProcessor {
 
-    public static class IndexRequestWithId extends IndexRequest {
+    private interface DocWriteRequestWithId {
+        long getRequestId();
+    }
+
+    private static class IndexRequestWithId extends IndexRequest implements DocWriteRequestWithId {
         private long requestId;
 
         public IndexRequestWithId(String index, long requestId) {
@@ -75,13 +79,14 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
             this.requestId = requestId;
         }
 
+        @Override
         public long getRequestId() {
             return requestId;
         }
     }
 
 
-    public static class DeleteRequestWithId extends DeleteRequest {
+    private static class DeleteRequestWithId extends DeleteRequest implements DocWriteRequestWithId {
         private long requestId;
 
         public DeleteRequestWithId(String index, long requestId) {
@@ -89,6 +94,7 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
             this.requestId = requestId;
         }
 
+        @Override
         public long getRequestId() {
             return requestId;
         }
@@ -125,9 +131,9 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
                                         convertBulkRequest(BulkRequest bulkRequest) {
                                     return bulkRequest.requests().stream().map(docWriteRequest -> {
                                         final long requestId;
-                                        if (docWriteRequest instanceof IndexRequestWithId) {
-                                            IndexRequestWithId indexRequestWithId = (IndexRequestWithId) docWriteRequest;
-                                            requestId = indexRequestWithId.getRequestId();
+                                        if (docWriteRequest instanceof DocWriteRequestWithId) {
+                                            DocWriteRequestWithId requestWithId = (DocWriteRequestWithId) docWriteRequest;
+                                            requestId = requestWithId.getRequestId();
                                         } else {
                                             throw new UnsupportedOperationException("Unexpected bulk request of type: "
                                                     + docWriteRequest.getClass());
