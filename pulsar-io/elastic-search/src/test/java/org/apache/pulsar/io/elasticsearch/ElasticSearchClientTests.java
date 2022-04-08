@@ -203,18 +203,19 @@ public abstract class ElasticSearchClientTests extends ElasticSearchTestBase {
                 .setIndexName(index)
                 .setBulkEnabled(true)
                 .setMalformedDocAction(ElasticSearchConfig.MalformedDocAction.FAIL);
-        ElasticSearchClient client = new ElasticSearchClient(config);
-        MockRecord<GenericObject> mockRecord = new MockRecord<>();
-        client.bulkIndex(mockRecord, Pair.of("1","{\"a\":1}"));
-        client.bulkIndex(mockRecord, Pair.of("2","{\"a\":\"toto\"}"));
-        client.flush();
-        assertNotNull(client.irrecoverableError.get());
-        assertTrue(client.irrecoverableError.get().getMessage().contains("mapper_parsing_exception"));
-        assertEquals(mockRecord.acked, 1);
-        assertEquals(mockRecord.failed, 1);
-        assertThrows(Exception.class, () -> client.bulkIndex(mockRecord, Pair.of("3","{\"a\":3}")));
-        assertEquals(mockRecord.acked, 1);
-        assertEquals(mockRecord.failed, 2);
+        try (ElasticSearchClient client = new ElasticSearchClient(config);) {
+            MockRecord<GenericObject> mockRecord = new MockRecord<>();
+            client.bulkIndex(mockRecord, Pair.of("1", "{\"a\":1}"));
+            client.bulkIndex(mockRecord, Pair.of("2", "{\"a\":\"toto\"}"));
+            client.flush();
+            assertNotNull(client.irrecoverableError.get());
+            assertTrue(client.irrecoverableError.get().getMessage().contains("mapper_parsing_exception"));
+            assertEquals(mockRecord.acked, 1);
+            assertEquals(mockRecord.failed, 1);
+            assertThrows(Exception.class, () -> client.bulkIndex(mockRecord, Pair.of("3", "{\"a\":3}")));
+            assertEquals(mockRecord.acked, 1);
+            assertEquals(mockRecord.failed, 2);
+        }
     }
 
     @Test
@@ -338,7 +339,6 @@ public abstract class ElasticSearchClientTests extends ElasticSearchTestBase {
                     Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
                         assertEquals(mockRecord.acked, 15);
                         assertEquals(mockRecord.failed, 0);
-                        assertEquals(client.records.size(), 0);
                     });
 
                 } finally {

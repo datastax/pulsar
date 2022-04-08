@@ -22,13 +22,13 @@ package org.apache.pulsar.io.elasticsearch.client.opensearch;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpHost;
+import org.apache.pulsar.functions.api.Record;
 import org.apache.pulsar.io.elasticsearch.ElasticSearchConfig;
 import org.apache.pulsar.io.elasticsearch.RandomExponentialRetry;
 import org.apache.pulsar.io.elasticsearch.client.BulkProcessor;
 import org.apache.pulsar.io.elasticsearch.client.RestClient;
 import org.elasticsearch.client.Node;
 import org.opensearch.OpenSearchStatusException;
-import org.opensearch.action.DocWriteRequest;
 import org.opensearch.action.DocWriteResponse;
 import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.opensearch.action.admin.indices.refresh.RefreshRequest;
@@ -67,36 +67,36 @@ import java.util.stream.Collectors;
 @Slf4j
 public class OpenSearchHighLevelRestClient extends RestClient implements BulkProcessor {
 
-    private interface DocWriteRequestWithId {
-        long getRequestId();
+    private interface DocWriteRequestWithPulsarRecord {
+        Record getPulsarRecord();
     }
 
-    private static class IndexRequestWithId extends IndexRequest implements DocWriteRequestWithId {
-        private long requestId;
+    private static class IndexRequestWithPulsarRecord extends IndexRequest implements DocWriteRequestWithPulsarRecord {
+        private Record pulsarRecord;
 
-        public IndexRequestWithId(String index, long requestId) {
+        public IndexRequestWithPulsarRecord(String index, Record pulsarRecord) {
             super(index);
-            this.requestId = requestId;
+            this.pulsarRecord = pulsarRecord;
         }
 
         @Override
-        public long getRequestId() {
-            return requestId;
+        public Record getPulsarRecord() {
+            return pulsarRecord;
         }
     }
 
 
-    private static class DeleteRequestWithId extends DeleteRequest implements DocWriteRequestWithId {
-        private long requestId;
+    private static class DeleteRequestWithPulsarRecord extends DeleteRequest implements DocWriteRequestWithPulsarRecord {
+        private Record pulsarRecord;
 
-        public DeleteRequestWithId(String index, long requestId) {
+        public DeleteRequestWithPulsarRecord(String index, Record pulsarRecord) {
             super(index);
-            this.requestId = requestId;
+            this.pulsarRecord = pulsarRecord;
         }
 
         @Override
-        public long getRequestId() {
-            return requestId;
+        public Record getPulsarRecord() {
+            return pulsarRecord;
         }
     }
 
@@ -115,7 +115,8 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
                         .setSocketTimeout(config.getSocketTimeoutInMs()))
                 .setHttpClientConfigCallback(this.configCallback)
                 .setFailureListener(new org.opensearch.client.RestClient.FailureListener() {
-                    public void onFailure(Node node) {
+                    @Override
+                    public void onFailure(org.opensearch.client.Node node) {
                         log.warn("Node host={} failed", node.getHost());
                     }
                 });
@@ -130,16 +131,16 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
                                 private List<BulkProcessor.BulkOperationRequest>
                                         convertBulkRequest(BulkRequest bulkRequest) {
                                     return bulkRequest.requests().stream().map(docWriteRequest -> {
-                                        final long requestId;
-                                        if (docWriteRequest instanceof DocWriteRequestWithId) {
-                                            DocWriteRequestWithId requestWithId = (DocWriteRequestWithId) docWriteRequest;
-                                            requestId = requestWithId.getRequestId();
+                                        final Record pulsarRecord;
+                                        if (docWriteRequest instanceof DocWriteRequestWithPulsarRecord) {
+                                            DocWriteRequestWithPulsarRecord requestWithId = (DocWriteRequestWithPulsarRecord) docWriteRequest;
+                                            pulsarRecord = requestWithId.getPulsarRecord();
                                         } else {
                                             throw new UnsupportedOperationException("Unexpected bulk request of type: "
                                                     + docWriteRequest.getClass());
                                         }
                                         return BulkProcessor.BulkOperationRequest.builder()
-                                                .operationId(requestId)
+                                                .pulsarRecord(pulsarRecord)
                                                 .build();
                                     }).collect(Collectors.toList());
                                 }
@@ -278,13 +279,9 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
         return this;
     }
 
-
-
-
-
     @Override
     public void appendIndexRequest(BulkProcessor.BulkIndexRequest request) throws IOException {
-        IndexRequest indexRequest = new IndexRequestWithId(request.getIndex(), request.getRequestId());
+        IndexRequest indexRequest = new IndexRequestWithPulsarRecord(request.getIndex(), request.getRecord());
         if (!Strings.isNullOrEmpty(request.getDocumentId())) {
             indexRequest.id(request.getDocumentId());
         }
@@ -295,7 +292,7 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
 
     @Override
     public void appendDeleteRequest(BulkProcessor.BulkDeleteRequest request) throws IOException {
-        DeleteRequest deleteRequest = new DeleteRequestWithId(request.getIndex(), request.getRequestId());
+        DeleteRequest deleteRequest = new DeleteRequestWithPulsarRecord(request.getIndex(), request.getRecord());
         deleteRequest.id(request.getDocumentId());
         deleteRequest.type(config.getTypeName());
         internalBulkProcessor.add(deleteRequest);

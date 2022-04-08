@@ -20,6 +20,7 @@ package org.apache.pulsar.io.elasticsearch.client;
 
 import lombok.Builder;
 import lombok.Getter;
+import org.apache.pulsar.functions.api.Record;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -34,7 +35,7 @@ public interface BulkProcessor extends Closeable {
     @Builder
     @Getter
     class BulkOperationRequest {
-        private long operationId;
+        private Record pulsarRecord;
     }
 
     @Builder
@@ -58,6 +59,7 @@ public interface BulkProcessor extends Closeable {
     @Builder
     @Getter
     class BulkIndexRequest {
+        private Record record;
         private long requestId;
         private String index;
         private String documentId;
@@ -67,6 +69,7 @@ public interface BulkProcessor extends Closeable {
     @Builder
     @Getter
     class BulkDeleteRequest {
+        private Record record;
         private long requestId;
         private String index;
         private String documentId;
