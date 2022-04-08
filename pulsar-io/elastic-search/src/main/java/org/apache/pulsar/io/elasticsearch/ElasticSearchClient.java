@@ -156,7 +156,6 @@ public class ElasticSearchClient implements AutoCloseable {
                     .documentSource(documentSource)
                     .requestId(operationId)
                     .build();
-            System.out.println("put opid:" + operationId);
             records.put(operationId, record);
             client.getBulkProcessor().appendIndexRequest(bulkIndexRequest);
         } catch(Exception e) {
