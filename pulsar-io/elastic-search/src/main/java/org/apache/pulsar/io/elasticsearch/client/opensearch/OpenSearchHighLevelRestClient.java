@@ -61,17 +61,41 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class OpenSearchHighLevelRestClient extends RestClient implements BulkProcessor {
 
+    public static class IndexRequestWithId extends IndexRequest {
+        private long requestId;
+
+        public IndexRequestWithId(String index, long requestId) {
+            super(index);
+            this.requestId = requestId;
+        }
+
+        public long getRequestId() {
+            return requestId;
+        }
+    }
+
+
+    public static class DeleteRequestWithId extends DeleteRequest {
+        private long requestId;
+
+        public DeleteRequestWithId(String index, long requestId) {
+            super(index);
+            this.requestId = requestId;
+        }
+
+        public long getRequestId() {
+            return requestId;
+        }
+    }
+
     private RestHighLevelClient client;
     private org.opensearch.action.bulk.BulkProcessor internalBulkProcessor;
-    private final ConcurrentMap<DocWriteRequest<?>, Long> bulkRequestMappings = new ConcurrentHashMap<>();
 
     public OpenSearchHighLevelRestClient(ElasticSearchConfig elasticSearchConfig, BulkProcessor.Listener bulkProcessorListener) throws MalformedURLException {
         super(elasticSearchConfig, bulkProcessorListener);
@@ -100,7 +124,14 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
                                 private List<BulkProcessor.BulkOperationRequest>
                                         convertBulkRequest(BulkRequest bulkRequest) {
                                     return bulkRequest.requests().stream().map(docWriteRequest -> {
-                                        long requestId = bulkRequestMappings.get(docWriteRequest);
+                                        final long requestId;
+                                        if (docWriteRequest instanceof IndexRequestWithId) {
+                                            IndexRequestWithId indexRequestWithId = (IndexRequestWithId) docWriteRequest;
+                                            requestId = indexRequestWithId.getRequestId();
+                                        } else {
+                                            throw new UnsupportedOperationException("Unexpected bulk request of type: "
+                                                    + docWriteRequest.getClass());
+                                        }
                                         return BulkProcessor.BulkOperationRequest.builder()
                                                 .operationId(requestId)
                                                 .build();
@@ -242,24 +273,25 @@ public class OpenSearchHighLevelRestClient extends RestClient implements BulkPro
     }
 
 
+
+
+
     @Override
     public void appendIndexRequest(BulkProcessor.BulkIndexRequest request) throws IOException {
-        IndexRequest indexRequest = Requests.indexRequest(request.getIndex());
+        IndexRequest indexRequest = new IndexRequestWithId(request.getIndex(), request.getRequestId());
         if (!Strings.isNullOrEmpty(request.getDocumentId())) {
             indexRequest.id(request.getDocumentId());
         }
         indexRequest.type(config.getTypeName());
         indexRequest.source(request.getDocumentSource(), XContentType.JSON);
-        bulkRequestMappings.put(indexRequest, request.getRequestId());
         internalBulkProcessor.add(indexRequest);
     }
 
     @Override
     public void appendDeleteRequest(BulkProcessor.BulkDeleteRequest request) throws IOException {
-        DeleteRequest deleteRequest = Requests.deleteRequest(request.getIndex());
+        DeleteRequest deleteRequest = new DeleteRequestWithId(request.getIndex(), request.getRequestId());
         deleteRequest.id(request.getDocumentId());
         deleteRequest.type(config.getTypeName());
-        bulkRequestMappings.put(deleteRequest, request.getRequestId());
         internalBulkProcessor.add(deleteRequest);
     }
 
