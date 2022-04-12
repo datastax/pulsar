@@ -20,11 +20,25 @@ package org.apache.pulsar.io.elasticsearch;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNull;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.ImmutableMap;
+
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.TreeMap;
+
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.api.schema.*;
+import org.apache.pulsar.client.impl.schema.generic.GenericAvroRecord;
 import org.apache.pulsar.client.impl.schema.generic.GenericSchemaImpl;
 import org.apache.pulsar.common.schema.KeyValue;
 import org.apache.pulsar.common.schema.KeyValueEncodingType;
@@ -285,5 +299,158 @@ public class ElasticSearchExtractTests {
         });
         assertEquals(pair.getLeft(), "[\"1\",1]");
         assertNull(pair.getRight());
+    }
+
+    @Test
+    public void testS() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+        mapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true);
+
+        final JsonNode jsonNode = new ObjectMapper().readValue("{\"z\": true,\"a\": {\"c\": true, \"b\": false}}", JsonNode.class);
+        System.out.println("jsonNode" + jsonNode);
+        final String res = mapper.writeValueAsString(jsonNode);
+        System.out.println("res:" + res);
+
+    }
+
+    @Test(dataProvider = "schemaType")
+    public void testSortKeys(SchemaType schemaType) throws Exception {
+        {
+            RecordSchemaBuilder keySchemaBuilder = org.apache.pulsar.client.api.schema.SchemaBuilder.record("key");
+            keySchemaBuilder.field("a").type(SchemaType.STRING).optional().defaultValue(null);
+            keySchemaBuilder.field("b").type(SchemaType.STRING).optional().defaultValue(null);
+            keySchemaBuilder.field("c").type(SchemaType.STRING).optional().defaultValue(null);
+
+            RecordSchemaBuilder udtSchemaBuilder = SchemaBuilder.record("type1");
+            udtSchemaBuilder.field("b_inside_inner").type(SchemaType.STRING).optional().defaultValue(null);
+            udtSchemaBuilder.field("a_inside_inner").type(SchemaType.STRING).optional().defaultValue(null);
+            GenericSchema<GenericRecord> udtGenericSchema = GenericSchemaImpl.of(udtSchemaBuilder.build(schemaType));
+
+            keySchemaBuilder.field("inner", udtGenericSchema).type(schemaType).optional().defaultValue(null);
+            GenericSchema<GenericRecord> keySchema = GenericSchemaImpl.of(keySchemaBuilder.build(schemaType));
+
+            final GenericRecord innerRecord = udtGenericSchema.newRecordBuilder()
+                    .set("b_inside_inner", "0b_value_from_inner")
+                    .set("a_inside_inner", "a_value_from_inner")
+                    .build();
+
+            GenericRecord keyGenericRecord = keySchema.newRecordBuilder()
+                    .set("c", "c_key")
+                    .set("b", "0b_key")
+                    .set("a", "a_key")
+                    .set("inner", innerRecord)
+                    .build();
+
+            Record<GenericObject> genericObjectRecord = getKeyValueGenericObject(schemaType, keySchema, keyGenericRecord);
+
+
+            ElasticSearchSink elasticSearchSink = new ElasticSearchSink();
+            elasticSearchSink.open(ImmutableMap.of(
+                    "elasticSearchUrl", "http://localhost:9200",
+                    "compatibilityMode", "ELASTICSEARCH",
+                    "schemaEnable", "true",
+                    "canonicalKeyFields", "false",
+                    "keyIgnore", "false"), null);
+            Pair<String, String> pair = elasticSearchSink.extractIdAndDocument(genericObjectRecord);
+            assertEquals(pair.getKey(), "[\"a_key\",\"0b_key\",\"c_key\",{\"b_inside_inner\":\"0b_value_from_inner\",\"a_inside_inner\":\"a_value_from_inner\"}]");
+
+            elasticSearchSink = new ElasticSearchSink();
+            elasticSearchSink.open(ImmutableMap.of(
+                    "elasticSearchUrl", "http://localhost:9200",
+                    "compatibilityMode", "ELASTICSEARCH",
+                    "schemaEnable", "true",
+                    "canonicalKeyFields", "true",
+                    "keyIgnore", "false"), null);
+            pair = elasticSearchSink.extractIdAndDocument(genericObjectRecord);
+            assertEquals(pair.getKey(), "[\"a_key\",\"0b_key\",\"c_key\",{\"a_inside_inner\":\"a_value_from_inner\",\"b_inside_inner\":\"0b_value_from_inner\"}]");
+        }
+
+        {
+            RecordSchemaBuilder keySchemaBuilder = org.apache.pulsar.client.api.schema.SchemaBuilder.record("key");
+
+            RecordSchemaBuilder udtSchemaBuilder = SchemaBuilder.record("type1");
+            udtSchemaBuilder.field("b_inside_inner").type(SchemaType.STRING).optional().defaultValue(null);
+            udtSchemaBuilder.field("a_inside_inner").type(SchemaType.STRING).optional().defaultValue(null);
+            GenericSchema<GenericRecord> udtGenericSchema = GenericSchemaImpl.of(udtSchemaBuilder.build(schemaType));
+
+            keySchemaBuilder.field("singleKey", udtGenericSchema).type(schemaType).optional().defaultValue(null);
+            GenericSchema<GenericRecord> keySchema = GenericSchemaImpl.of(keySchemaBuilder.build(schemaType));
+
+            final GenericRecord innerRecord = udtGenericSchema.newRecordBuilder()
+                    .set("b_inside_inner", "0b_value_from_inner")
+                    .set("a_inside_inner", "a_value_from_inner")
+                    .build();
+
+            GenericRecord keyGenericRecord = keySchema.newRecordBuilder()
+                    .set("singleKey", innerRecord)
+                    .build();
+
+            Record<GenericObject> genericObjectRecord = getKeyValueGenericObject(schemaType, keySchema, keyGenericRecord);
+
+
+            ElasticSearchSink elasticSearchSink = new ElasticSearchSink();
+            elasticSearchSink.open(ImmutableMap.of(
+                    "elasticSearchUrl", "http://localhost:9200",
+                    "compatibilityMode", "ELASTICSEARCH",
+                    "schemaEnable", "true",
+                    "canonicalKeyFields", "false",
+                    "keyIgnore", "false"), null);
+            Pair<String, String> pair = elasticSearchSink.extractIdAndDocument(genericObjectRecord);
+            assertEquals(pair.getKey(), "{\"b_inside_inner\":\"0b_value_from_inner\",\"a_inside_inner\":\"a_value_from_inner\"}");
+
+            elasticSearchSink = new ElasticSearchSink();
+            elasticSearchSink.open(ImmutableMap.of(
+                    "elasticSearchUrl", "http://localhost:9200",
+                    "compatibilityMode", "ELASTICSEARCH",
+                    "schemaEnable", "true",
+                    "canonicalKeyFields", "true",
+                    "keyIgnore", "false"), null);
+            pair = elasticSearchSink.extractIdAndDocument(genericObjectRecord);
+            assertEquals(pair.getKey(), "{\"a_inside_inner\":\"a_value_from_inner\",\"b_inside_inner\":\"0b_value_from_inner\"}");
+
+        }
+    }
+
+    private Record<GenericObject> getKeyValueGenericObject(SchemaType schemaType, GenericSchema<GenericRecord> keySchema, GenericRecord keyGenericRecord) {
+        RecordSchemaBuilder valueSchemaBuilder = SchemaBuilder.record("value");
+        valueSchemaBuilder.field("value").type(SchemaType.STRING);
+        GenericSchema<GenericRecord> valueSchema = GenericSchemaImpl.of(valueSchemaBuilder.build(schemaType));
+
+        GenericRecord valueGenericRecord = valueSchema.newRecordBuilder()
+                .set("value", "value")
+                .build();
+
+        Schema<KeyValue<GenericRecord, GenericRecord>> keyValueSchema =
+                Schema.KeyValue(keySchema, valueSchema, KeyValueEncodingType.INLINE);
+        KeyValue<GenericRecord, GenericRecord> keyValue = new KeyValue<>(keyGenericRecord, valueGenericRecord);
+        GenericObject genericObject = new GenericObject() {
+            @Override
+            public SchemaType getSchemaType() {
+                return SchemaType.KEY_VALUE;
+            }
+
+            @Override
+            public Object getNativeObject() {
+                return keyValue;
+            }
+        };
+        Record<GenericObject> genericObjectRecord = new Record<GenericObject>() {
+            @Override
+            public Optional<String> getTopicName() {
+                return Optional.of("data-ks1.table1");
+            }
+
+            @Override
+            public Schema  getSchema() {
+                return keyValueSchema;
+            }
+
+            @Override
+            public GenericObject getValue() {
+                return genericObject;
+            }
+        };
+        return genericObjectRecord;
     }
 }
