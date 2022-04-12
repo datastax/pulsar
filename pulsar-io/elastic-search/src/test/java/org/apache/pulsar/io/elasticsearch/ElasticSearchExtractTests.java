@@ -21,24 +21,11 @@ package org.apache.pulsar.io.elasticsearch;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNull;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.ImmutableMap;
-
-import java.nio.charset.StandardCharsets;
 import java.util.Optional;
-import java.util.TreeMap;
-
-import lombok.SneakyThrows;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.api.schema.*;
-import org.apache.pulsar.client.impl.schema.generic.GenericAvroRecord;
 import org.apache.pulsar.client.impl.schema.generic.GenericSchemaImpl;
 import org.apache.pulsar.common.schema.KeyValue;
 import org.apache.pulsar.common.schema.KeyValueEncodingType;
@@ -299,19 +286,6 @@ public class ElasticSearchExtractTests {
         });
         assertEquals(pair.getLeft(), "[\"1\",1]");
         assertNull(pair.getRight());
-    }
-
-    @Test
-    public void testS() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
-        mapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true);
-
-        final JsonNode jsonNode = new ObjectMapper().readValue("{\"z\": true,\"a\": {\"c\": true, \"b\": false}}", JsonNode.class);
-        System.out.println("jsonNode" + jsonNode);
-        final String res = mapper.writeValueAsString(jsonNode);
-        System.out.println("res:" + res);
-
     }
 
     @Test(dataProvider = "schemaType")

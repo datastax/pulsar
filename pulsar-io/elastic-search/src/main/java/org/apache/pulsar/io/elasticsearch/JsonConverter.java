@@ -23,12 +23,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericEnumSymbol;
 import org.apache.avro.generic.GenericFixed;
 import org.apache.avro.generic.GenericRecord;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Convert an AVRO GenericRecord to a JsonNode.
@@ -196,26 +194,9 @@ public class JsonConverter {
         Iterator<String> it = jsonNode.fieldNames();
         while (it.hasNext()) {
             String fieldName = it.next();
-            if (fields == null || fields.contains(fieldName)) {
+            if (fields.contains(fieldName)) {
                 arrayNode.add(jsonNode.get(fieldName));
             }
-        }
-        return arrayNode;
-    }
-
-    public static ArrayNode toSortedJsonArray(JsonNode jsonNode, List<String> fields) {
-        ArrayNode arrayNode = jsonNodeFactory.arrayNode();
-        Iterator<String> it = jsonNode.fieldNames();
-        TreeMap<String, JsonNode> orderedNodes = new TreeMap<>();
-        while (it.hasNext()) {
-            String fieldName = it.next();
-            if (fields == null || fields.contains(fieldName)) {
-                final JsonNode currentJsonNode = jsonNode.get(fieldName);
-                orderedNodes.put(fieldName, currentJsonNode);
-            }
-        }
-        for (JsonNode orderedNode : orderedNodes.values()) {
-            arrayNode.add(orderedNode);
         }
         return arrayNode;
     }
