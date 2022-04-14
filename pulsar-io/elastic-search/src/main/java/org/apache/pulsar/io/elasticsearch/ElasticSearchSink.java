@@ -79,15 +79,13 @@ public class ElasticSearchSink implements Sink<GenericObject> {
                     .builder()
                             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
                     .nodeFactory(new JsonNodeFactory() {
-
                         @Override
                         public ObjectNode objectNode() {
                             return new ObjectNode(this, new TreeMap<String, JsonNode>());
                         }
 
                     })
-                            .build();
-
+                    .build();
         }
     }
 
