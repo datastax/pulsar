@@ -186,7 +186,7 @@ public class ElasticSearchSink implements Sink<GenericObject> {
             }
 
             String id = null;
-            if (elasticSearchConfig.isKeyIgnore() == false && key != null && keySchema != null) {
+            if (!elasticSearchConfig.isKeyIgnore() && key != null && keySchema != null) {
                 id = stringifyKey(keySchema, key);
             }
 
@@ -271,6 +271,10 @@ public class ElasticSearchSink implements Sink<GenericObject> {
     public String stringifyKey(JsonNode jsonNode) throws JsonProcessingException {
         List<String> fields = new ArrayList<>();
         jsonNode.fieldNames().forEachRemaining(fields::add);
+        return stringifyKey(jsonNode, fields);
+    }
+
+    public String stringifyKey(JsonNode jsonNode, List<String> fields) throws JsonProcessingException {
         JsonNode toConvert;
         if (fields.size() == 1) {
             toConvert = jsonNode.get(fields.get(0));
@@ -289,18 +293,6 @@ public class ElasticSearchSink implements Sink<GenericObject> {
         return (serializedId.startsWith("\"") && serializedId.endsWith("\""))
                 ? serializedId.substring(1, serializedId.length() - 1)  // remove double quotes
                 : serializedId;
-    }
-
-    public String stringifyKey(JsonNode jsonNode, List<String> fields) throws JsonProcessingException {
-        if (fields.size() == 1) {
-            JsonNode singleNode = jsonNode.get(fields.get(0));
-            String id = objectMapper.writeValueAsString(singleNode);
-            return (id.startsWith("\"") && id.endsWith("\""))
-                    ? id.substring(1, id.length() - 1)  // remove double quotes
-                    : id;
-        } else {
-            return JsonConverter.toJsonArray(jsonNode, fields).toString();
-        }
     }
 
     public String stringifyValue(Schema<?> schema, Object val) throws JsonProcessingException {
