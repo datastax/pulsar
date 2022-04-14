@@ -106,6 +106,8 @@ public class ElasticSearchConfigTests {
         assertEquals(config.getSsl().getProtocols(), "TLSv1.2");
 
         assertEquals(config.getCompatibilityMode(), ElasticSearchConfig.CompatibilityMode.AUTO);
+        assertEquals(config.isCanonicalKeyFields(), false);
+        assertEquals(config.getIdHashingAlgorithm(), ElasticSearchConfig.IdHashingAlgorithm.NONE);
     }
 
     @Test
