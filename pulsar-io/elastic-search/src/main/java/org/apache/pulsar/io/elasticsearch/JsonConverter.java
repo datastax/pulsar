@@ -23,10 +23,12 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericFixed;
 import org.apache.avro.generic.GenericRecord;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Convert an AVRO GenericRecord to a JsonNode.
@@ -86,18 +88,26 @@ public class JsonConverter {
                 case ARRAY: {
                     Schema elementSchema = schema.getElementType();
                     ArrayNode arrayNode = jsonNodeFactory.arrayNode();
-                    for (Object elem : (Object[]) value) {
+                    Object[] iterable;
+                    if (value instanceof GenericData.Array) {
+                        iterable = ((GenericData.Array) value).toArray();
+                    } else {
+                        iterable = (Object[]) value;
+                    }
+                    for (Object elem : iterable) {
                         JsonNode fieldValue = toJson(elasticSearchConfig, elementSchema, elem);
                         arrayNode.add(fieldValue);
                     }
                     return arrayNode;
                 }
                 case MAP: {
-                    Map<String, Object> map = (Map<String, Object>) value;
+                    Map<Object, Object> map = (Map<Object, Object>) value;
                     ObjectNode objectNode = jsonNodeFactory.objectNode();
-                    for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    for (Map.Entry<Object, Object> entry : map.entrySet()) {
                         JsonNode jsonNode = toJson(elasticSearchConfig, schema.getValueType(), entry.getValue());
-                        objectNode.set(entry.getKey(), jsonNode);
+                        // can be a String or org.apache.avro.util.Utf8
+                        final String entryKey = entry.getKey() == null ? null : entry.getKey().toString();
+                        objectNode.set(entryKey, jsonNode);
                     }
                     return objectNode;
                 }

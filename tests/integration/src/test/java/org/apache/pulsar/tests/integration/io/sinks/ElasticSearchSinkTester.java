@@ -21,9 +21,13 @@ package org.apache.pulsar.tests.integration.io.sinks;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
@@ -31,6 +35,7 @@ import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.ElasticsearchTransport;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
+import com.google.common.collect.ImmutableMap;
 import io.vertx.core.http.RequestOptions;
 import lombok.AllArgsConstructor;
 import lombok.Cleanup;
@@ -61,6 +66,9 @@ public abstract class ElasticSearchSinkTester extends SinkTester<ElasticsearchCo
     public static final class SimplePojo {
         private String field1;
         private String field2;
+        private List<Integer> list1;
+        private Set<Long> set1;
+        private Map<String, String> map1;
     }
 
     /**
@@ -129,9 +137,20 @@ public abstract class ElasticSearchSinkTester extends SinkTester<ElasticsearchCo
             for (int i = 0; i < numMessages; i++) {
                 String key = "key-" + i;
                 kvs.put(key, key);
+                final SimplePojo keyPojo = new SimplePojo(
+                        "f1_" + i,
+                        "f2_" + i,
+                        Arrays.asList(i, i +1),
+                        new HashSet<>(Arrays.asList((long) i)),
+                        ImmutableMap.of("map1_k_" + i, "map1_kv_" + i));
+                final SimplePojo valuePojo = new SimplePojo(
+                        "f1_" + i,
+                        "f2_" + i,
+                        Arrays.asList(i, i +1),
+                        new HashSet<>(Arrays.asList((long) i)),
+                        ImmutableMap.of("map1_v_" + i, "map1_vv_" + i));
                 producer.newMessage()
-                        .value(new KeyValue<>(new SimplePojo("f1_" + i, "f2_" + i),
-                                new SimplePojo("v1_" + i, "v2_" + i)))
+                        .value(new KeyValue<>(keyPojo, valuePojo))
                         .send();
             }
 
