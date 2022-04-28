@@ -153,8 +153,8 @@ public class KinesisSinkTester extends SinkTester<LocalStackContainer> {
                         new HashSet<>(Arrays.asList((long) i)),
                         ImmutableMap.of("map1_k_" + i, "map1_kv_" + i));
                 final SimplePojo valuePojo = new SimplePojo(
-                        "f1_" + i,
-                        "f2_" + i,
+                        String.valueOf(i),
+                        "v2_" + i,
                         Arrays.asList(i, i +1),
                         new HashSet<>(Arrays.asList((long) i)),
                         ImmutableMap.of("map1_v_" + i, "map1_vv_" + i));
