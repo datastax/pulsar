@@ -33,7 +33,6 @@ public class UnwrapKeyValueStep implements TransformStep {
                 transformContext.setValueSchema(transformContext.getKeySchema());
                 transformContext.setValueObject(transformContext.getKeyObject());
             }
-            // TODO: can we avoid making the conversion to NATIVE_AVRO ?
             transformContext.setValueModified(true);
             transformContext.setKeySchema(null);
             transformContext.setKeyObject(null);
