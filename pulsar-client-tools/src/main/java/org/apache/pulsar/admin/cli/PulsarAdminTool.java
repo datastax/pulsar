@@ -159,9 +159,6 @@ public class PulsarAdminTool {
 
     public void setupCommands(Function<PulsarAdminBuilder, ? extends PulsarAdmin> adminFactory) {
         try {
-            adminBuilder.serviceHttpUrl(rootParams.serviceUrl);
-            adminBuilder.authentication(rootParams.authPluginClassName, rootParams.authParams);
-            adminBuilder.requestTimeout(rootParams.requestTimeout, TimeUnit.SECONDS);
             Supplier<PulsarAdmin> admin = new PulsarAdminSupplier(adminBuilder, adminFactory);
             for (Map.Entry<String, Class<?>> c : commandMap.entrySet()) {
                 addCommand(c, admin);
@@ -241,6 +238,11 @@ public class PulsarAdminTool {
 
         try {
             jcommander.parse(Arrays.copyOfRange(args, 0, Math.min(cmdPos, args.length)));
+
+            //rootParams are populated by jcommander.parse
+            adminBuilder.serviceHttpUrl(rootParams.serviceUrl);
+            adminBuilder.authentication(rootParams.authPluginClassName, rootParams.authParams);
+            adminBuilder.requestTimeout(rootParams.requestTimeout, TimeUnit.SECONDS);
         } catch (Exception e) {
             System.err.println(e.getMessage());
             System.err.println();
