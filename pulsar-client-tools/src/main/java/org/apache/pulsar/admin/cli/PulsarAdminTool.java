@@ -249,7 +249,6 @@ public class PulsarAdminTool {
             jcommander.usage();
             return false;
         }
-
         if (isBlank(rootParams.serviceUrl)) {
             System.out.println("Can't find any admin url to use");
             jcommander.usage();
