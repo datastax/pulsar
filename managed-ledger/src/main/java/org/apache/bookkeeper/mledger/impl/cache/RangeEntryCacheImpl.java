@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.primitives.Longs;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.prometheus.client.Counter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -55,6 +56,27 @@ import org.slf4j.LoggerFactory;
  */
 public class RangeEntryCacheImpl implements EntryCache {
 
+    private static final Counter COUNT_PENDING_READS_MATCHED = Counter
+            .build()
+            .name("pulsar_ml_cache_pendingreads_matched")
+            .help("Pending reads reused with perfect range match")
+            .create();
+    private static final Counter COUNT_PENDING_READS_MATCHED_INCLUDED = Counter
+            .build()
+            .name("pulsar_ml_cache_pendingreads_matched_included")
+            .help("Pending reads reused by attaching to a read with a larger range")
+            .create();
+    private static final Counter COUNT_PENDING_READS_MISSED = Counter
+            .build()
+            .name("pulsar_ml_cache_pendingreads_missed")
+            .help("Pending reads that didn't find a match")
+            .create();
+    private static final Counter COUNT_PENDING_READS_MISSED_BUT_OVERLAPPING = Counter
+            .build()
+            .name("pulsar_ml_cache_pendingreads_missed_overlapping")
+            .help("Pending reads that didn't find a match but they partially overlap with another read")
+            .create();
+
     private final RangeEntryCacheManagerImpl manager;
     private final ManagedLedgerImpl ml;
     private ManagedLedgerInterceptor interceptor;
@@ -70,9 +92,16 @@ public class RangeEntryCacheImpl implements EntryCache {
         private final long startEntry;
         private final long endEntry;
 
+
         boolean includes(PendingReadKey other) {
             return startEntry <= other.startEntry && other.endEntry <= endEntry;
         }
+
+        boolean overlaps(PendingReadKey other) {
+            return (other.startEntry <= startEntry && startEntry <= other.endEntry)
+                    || (other.startEntry <= endEntry && endEntry <= other.endEntry);
+        }
+
     }
 
     public RangeEntryCacheImpl(RangeEntryCacheManagerImpl manager, ManagedLedgerImpl ml, boolean copyEntries) {
@@ -289,18 +318,28 @@ public class RangeEntryCacheImpl implements EntryCache {
         synchronized (ledgerCache) {
             CachedPendingRead existing = ledgerCache.get(key);
             if (existing != null) {
+                COUNT_PENDING_READS_MATCHED.inc();
                 return existing;
             }
-            // TODO: use a sorted map
+            boolean someOverlappingButNotUsable = false;
             for (Map.Entry<PendingReadKey, CachedPendingRead> entry : ledgerCache.entrySet()) {
                 if (entry.getKey().includes(key)) {
-                    //log.info("partial match {} with {}", key, entry.getKey());
+                    COUNT_PENDING_READS_MATCHED_INCLUDED.inc();
                     return entry.getValue();
+                }
+
+                if (entry.getKey().overlaps(key)) {
+                    someOverlappingButNotUsable = true;
                 }
             }
             created.set(true);
             CachedPendingRead newRead = new CachedPendingRead(key, ledgerCache);
             ledgerCache.put(key, newRead);
+            if (someOverlappingButNotUsable) {
+                COUNT_PENDING_READS_MISSED_BUT_OVERLAPPING.inc();
+            } else {
+                COUNT_PENDING_READS_MISSED.inc();
+            }
             return newRead;
         }
     }
