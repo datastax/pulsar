@@ -154,7 +154,6 @@ public class MetaStoreImpl implements MetaStore {
         if (log.isDebugEnabled()) {
             log.debug("[{}] Updating metadata version={} with content={}", ledgerName, stat, mlInfo);
         }
-        log.info("[{}] Updating metadata version={} with content={}", ledgerName, stat, mlInfo);
 
         String path = PREFIX + ledgerName;
         store.put(path, compressLedgerInfo(mlInfo), Optional.of(stat.getVersion()))
@@ -215,9 +214,10 @@ public class MetaStoreImpl implements MetaStore {
     @Override
     public void asyncUpdateCursorInfo(String ledgerName, String cursorName, ManagedCursorInfo info, Stat stat,
             MetaStoreCallback<Void> callback) {
-        log.info("[{}] [{}] Updating cursor info ledgerId={} mark-delete={}:{} stat {}", ledgerName, cursorName,
-                info.getCursorsLedgerId(), info.getMarkDeleteLedgerId(), info.getMarkDeleteEntryId(), stat);
-
+        if (log.isDebugEnabled()) {
+            log.debug("[{}] [{}] Updating cursor info ledgerId={} mark-delete={}:{} stat {}", ledgerName, cursorName,
+                    info.getCursorsLedgerId(), info.getMarkDeleteLedgerId(), info.getMarkDeleteEntryId(), stat);
+        }
         String path = PREFIX + ledgerName + "/" + cursorName;
         byte[] content = compressCursorInfo(info);
 
