@@ -258,7 +258,7 @@ public class MultiTopicsConsumerImpl<T> extends ConsumerBase<T> {
         messagesFuture.thenAcceptAsync(messages -> {
             if (log.isDebugEnabled()) {
                 log.debug("[{}] [{}] Receive message from sub consumer:{}",
-                    topic, getSubscription(), consumer.getTopic());
+                    topic, consumer.getSubscription(), consumer.getTopic());
             }
             // Process the message, add to the queue and trigger listener or async callback
             messages.forEach(msg -> messageReceived(consumer, msg));
@@ -300,7 +300,7 @@ public class MultiTopicsConsumerImpl<T> extends ConsumerBase<T> {
 
         if (log.isDebugEnabled()) {
             log.debug("[{}][{}] Received message from topics-consumer {}",
-                    topic, getSubscription(), message.getMessageId());
+                    topic, consumer.getSubscription(), message.getMessageId());
         }
 
         // if asyncReceive is waiting : return message to callback without adding to incomingMessages queue
