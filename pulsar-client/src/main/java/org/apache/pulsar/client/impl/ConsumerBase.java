@@ -37,6 +37,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
+
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.pulsar.client.api.BatchReceivePolicy;
@@ -65,7 +67,7 @@ import org.slf4j.LoggerFactory;
 
 public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T> {
 
-    protected final String subscription;
+    protected final Function<String, String> subscriptionByTopic;
     protected final ConsumerConfigurationData<T> conf;
     protected final String consumerName;
     protected final CompletableFuture<Consumer<T>> subscribeFuture;
@@ -101,7 +103,8 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
                            ConsumerInterceptors interceptors) {
         super(client, topic);
         this.maxReceiverQueueSize = receiverQueueSize;
-        this.subscription = conf.getSubscriptionName();
+        this.subscriptionByTopic = conf.getSubscriptionNameByTopic() != null ? conf.getSubscriptionNameByTopic() :
+                                                                (topicName) -> conf.getSubscriptionName();
         this.conf = conf;
         this.consumerName = conf.getConsumerName() == null ? ConsumerName.generateRandomName() : conf.getConsumerName();
         this.subscribeFuture = subscribeFuture;
@@ -275,7 +278,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
                         new PulsarClientException.AlreadyClosedException(
                                 String.format("The consumer which subscribes the topic %s with subscription name %s "
                                         + "was already closed when cleaning and closing the consumers",
-                                        topic, subscription)));
+                                        topic, getSubscription())));
             }
         }
     }
@@ -291,7 +294,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
                         new PulsarClientException.AlreadyClosedException(
                                 String.format("The consumer which subscribes the topic %s with subscription name %s was"
                                                 + " already closed when cleaning and closing the consumers",
-                                        topic, subscription)));
+                                        topic, getSubscription())));
             }
         }
     }
@@ -562,7 +565,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
                                                            TransactionImpl txn) {
         CompletableFuture<Void> ackFuture;
         if (txn != null) {
-            ackFuture = txn.registerAckedTopic(getTopic(), subscription)
+            ackFuture = txn.registerAckedTopic(getTopic(), getSubscription())
                     .thenCompose(ignored -> doAcknowledge(messageIdList, ackType, properties, txn));
             txn.registerAckOp(ackFuture);
         } else {
@@ -583,7 +586,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
                 txn.registerCumulativeAckConsumer((ConsumerImpl<?>) this);
             }
 
-            ackFuture = txn.registerAckedTopic(getTopic(), subscription)
+            ackFuture = txn.registerAckedTopic(getTopic(), getSubscription())
                     .thenCompose(ignored -> doAcknowledge(messageId, ackType, properties, txn));
             // register the ackFuture as part of the transaction
             txn.registerAckOp(ackFuture);
@@ -698,7 +701,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
 
     @Override
     public String getSubscription() {
-        return subscription;
+        return subscriptionByTopic.apply(getTopic());
     }
 
     @Override
@@ -717,7 +720,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
     @Override
     public String toString() {
         return "ConsumerBase{"
-                + "subscription='" + subscription + '\''
+                + "subscription='" + getSubscription() + '\''
                 + ", consumerName='" + consumerName + '\''
                 + ", topic='" + topic + '\''
                 + '}';
@@ -988,12 +991,12 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
                         }
                     } else {
                         if (log.isDebugEnabled()) {
-                            log.debug("[{}] [{}] Message has been cleared from the queue", topic, subscription);
+                            log.debug("[{}] [{}] Message has been cleared from the queue", topic, getSubscription());
                         }
                     }
                 } while (msg != null);
             } catch (PulsarClientException e) {
-                log.warn("[{}] [{}] Failed to dequeue the message for listener", topic, subscription, e);
+                log.warn("[{}] [{}] Failed to dequeue the message for listener", topic, getSubscription(), e);
             }
         });
     }
@@ -1001,7 +1004,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
     protected void callMessageListener(Message<T> msg) {
         try {
             if (log.isDebugEnabled()) {
-                log.debug("[{}][{}] Calling message listener for message {}", topic, subscription,
+                log.debug("[{}][{}] Calling message listener for message {}", topic, getSubscription(),
                         msg.getMessageId());
             }
             ConsumerImpl receivedConsumer = (msg instanceof TopicMessageImpl)
@@ -1012,7 +1015,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
                                 ? ((TopicMessageImpl<T>) msg).getMessage() : msg));
             listener.received(ConsumerBase.this, msg);
         } catch (Throwable t) {
-            log.error("[{}][{}] Message listener error in processing message: {}", topic, subscription,
+            log.error("[{}][{}] Message listener error in processing message: {}", topic, getSubscription(),
                     msg.getMessageId(), t);
         }
     }

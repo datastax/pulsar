@@ -28,6 +28,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -58,6 +59,8 @@ public class ConsumerConfigurationData<T> implements Serializable, Cloneable {
     private Pattern topicsPattern;
 
     private String subscriptionName;
+
+    private Function<String, String> subscriptionNameByTopic;
 
     private SubscriptionType subscriptionType = SubscriptionType.Exclusive;
 

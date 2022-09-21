@@ -198,6 +198,7 @@ public class ConsumerImpl<T> extends ConsumerBase<T> implements ConnectionHandle
 
     private final boolean createTopicIfDoesNotExist;
     private final boolean poolMessages;
+    protected final String subscription;
 
     private final AtomicReference<ClientCnx> clientCnxUsedForConsumerRegistration = new AtomicReference<>();
     private final List<Throwable> previousExceptions = new CopyOnWriteArrayList<Throwable>();
@@ -250,6 +251,7 @@ public class ConsumerImpl<T> extends ConsumerBase<T> implements ConnectionHandle
            boolean createTopicIfDoesNotExist) {
         super(client, topic, conf, conf.getReceiverQueueSize(), executorProvider, subscribeFuture, schema,
                 interceptors);
+        this.subscription = subscriptionByTopic.apply(topic);
         this.consumerId = client.newConsumerId();
         this.subscriptionMode = conf.getSubscriptionMode();
         if (startMessageId != null) {

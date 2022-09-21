@@ -156,7 +156,7 @@ public class ConsumerStatsRecorderImpl implements ConsumerStatsRecorder {
                             currentNumBatchReceiveFailed, currentNumAcksFailed);
                 }
             } catch (Exception e) {
-                log.error("[{}] [{}] [{}]: {}", consumerImpl.getTopic(), consumerImpl.subscription
+                log.error("[{}] [{}] [{}]: {}", consumerImpl.getTopic(), consumerImpl.getSubscription()
                         , consumerImpl.consumerName, e.getMessage());
             } finally {
                 // schedule the next stat info

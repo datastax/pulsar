@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.AccessLevel;
@@ -216,6 +217,12 @@ public class ConsumerBuilderImpl<T> implements ConsumerBuilder<T> {
     public ConsumerBuilder<T> subscriptionName(String subscriptionName) {
         checkArgument(StringUtils.isNotBlank(subscriptionName), "subscriptionName cannot be blank");
         conf.setSubscriptionName(subscriptionName);
+        return this;
+    }
+
+    @Override
+    public ConsumerBuilder<T> subscriptionNameByTopic(Function<String, String> subscriptionNameByTopic) {
+        conf.setSubscriptionNameByTopic(subscriptionNameByTopic);
         return this;
     }
 

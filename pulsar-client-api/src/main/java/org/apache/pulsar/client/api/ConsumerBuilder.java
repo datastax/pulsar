@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import org.apache.pulsar.common.classification.InterfaceAudience;
 import org.apache.pulsar.common.classification.InterfaceStability;
@@ -166,6 +167,15 @@ public interface ConsumerBuilder<T> extends Cloneable {
      * @return the consumer builder instance
      */
     ConsumerBuilder<T> subscriptionName(String subscriptionName);
+
+    /**
+     * Specify a function to compute the subscription name depending on the topic for this consumer.
+     *
+     * @param subscriptionNameByTopic a function called to compute the subscription name given a topic.
+     *
+     * @return the consumer builder instance
+     */
+    ConsumerBuilder<T> subscriptionNameByTopic(Function<String, String> subscriptionNameByTopic);
 
     /**
      * Specify the subscription properties for this subscription.
