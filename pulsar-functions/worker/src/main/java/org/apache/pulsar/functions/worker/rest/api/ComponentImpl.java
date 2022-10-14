@@ -315,40 +315,26 @@ public abstract class ComponentImpl implements Component<PulsarWorkerService> {
         String namespace = functionDetails.getNamespace();
         PackageLocationMetaData.Builder packageLocationMetaDataBuilder = PackageLocationMetaData.newBuilder();
         boolean isPkgUrlProvided = isNotBlank(functionPkgUrl);
-        PackageName packageName = PackageName.get(
-                componentType.name(),
-                tenant,
-                namespace,
-                componentName,
-                String.valueOf(functionMetaData.getVersion()));
-        PackageMetadata metadata = PackageMetadata.builder()
-                .createTime(functionMetaData.getCreateTime()).build();
         if (worker().getFunctionRuntimeManager().getRuntimeFactory().externallyManaged()) {
             // For externally managed schedulers, the pkgUrl/builtin stuff can be copied to bk
             // if the function worker image does not include connectors
             if (!isEmpty(builtin)) {
+                File component;
+                switch (componentType) {
+                    case SOURCE:
+                        component = worker().getConnectorsManager().getSourceArchive(builtin).toFile();
+                        break;
+                    case SINK:
+                        component = worker().getConnectorsManager().getSinkArchive(builtin).toFile();
+                        break;
+                    default:
+                        component = worker().getFunctionsManager().getFunctionArchive(builtin).toFile();
+                        break;
+                }
+                packageLocationMetaDataBuilder.setOriginalFileName(component.getName());
                 if (worker().getWorkerConfig().getUploadBuiltinSinksSources()) {
-                    File component;
-                    String archiveName;
-                    switch (componentType) {
-                        case SOURCE:
-                            archiveName = functionDetails.getSource().getBuiltin();
-                            component = worker().getConnectorsManager().getSourceArchive(archiveName).toFile();
-                            break;
-                        case SINK:
-                            archiveName = functionDetails.getSink().getBuiltin();
-                            component = worker().getConnectorsManager().getSinkArchive(archiveName).toFile();
-                            break;
-                        default:
-                            archiveName = functionDetails.getBuiltin();
-                            component = worker().getFunctionsManager().getFunctionArchive(archiveName).toFile();
-                            break;
-                    }
                     packageLocationMetaDataBuilder.setPackagePath(createPackagePath(tenant, namespace, componentName,
                             component.getName()));
-                    packageLocationMetaDataBuilder.setOriginalFileName(component.getName());
-                    packageLocationMetaDataBuilder.setPackagePath(createPackagePath(tenant, namespace,
-                            componentName, component.getName()));
                     WorkerUtils.uploadFileToBookkeeper(packageLocationMetaDataBuilder.getPackagePath(),
                             component, worker().getDlogNamespace());
                     log.info("Uploading {} package to {}", ComponentTypeUtils.toString(componentType),
