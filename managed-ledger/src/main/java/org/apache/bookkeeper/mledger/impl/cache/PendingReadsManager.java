@@ -502,8 +502,13 @@ public class PendingReadsManager {
                     if (!entries.isEmpty()) {
                         long size = entries.get(0).getLength();
                         estimatedEntrySize = size;
+                        // assuming that the entries are processed all together
+                        ((EntryImpl) entries.get(entries.size() - 1)).onDellocate(() -> {
+                            pendingReadsLimiter.release(newHandle);
+                        });
+                    } else {
+                        pendingReadsLimiter.release(newHandle);
                     }
-                    pendingReadsLimiter.release(newHandle);
                     originalCallback.readEntriesComplete(entries, ctx);
                 }
 
