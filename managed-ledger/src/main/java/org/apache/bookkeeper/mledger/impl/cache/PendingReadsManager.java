@@ -26,6 +26,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import lombok.AllArgsConstructor;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -497,15 +499,21 @@ public class PendingReadsManager {
             return null;
         } else {
             callback = new AsyncCallbacks.ReadEntriesCallback() {
+
                 @Override
                 public void readEntriesComplete(List<Entry> entries, Object ctx) {
                     if (!entries.isEmpty()) {
                         long size = entries.get(0).getLength();
                         estimatedEntrySize = size;
-                        // assuming that the entries are processed all together
-                        ((EntryImpl) entries.get(entries.size() - 1)).onDellocate(() -> {
-                            pendingReadsLimiter.release(newHandle);
-                        });
+
+                        AtomicInteger remainingCount = new AtomicInteger(entries.size());
+                        for (Entry entry : entries) {
+                            ((EntryImpl) entry).onDellocate(() -> {
+                                if (remainingCount.decrementAndGet() <= 0) {
+                                    pendingReadsLimiter.release(newHandle);
+                                }
+                            });
+                        }
                     } else {
                         pendingReadsLimiter.release(newHandle);
                     }
