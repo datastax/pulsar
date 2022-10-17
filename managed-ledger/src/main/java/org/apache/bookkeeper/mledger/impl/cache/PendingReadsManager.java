@@ -26,8 +26,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import lombok.AllArgsConstructor;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -42,11 +40,6 @@ import org.apache.bookkeeper.mledger.impl.EntryImpl;
  */
 @Slf4j
 public class PendingReadsManager {
-
-    /**
-     * Overhead per-entry to take into account the envelope.
-     */
-    private static final long BOOKKEEPER_READ_OVERHEAD_PER_ENTRY = 64;
 
     private static final Counter COUNT_ENTRIES_READ_FROM_BK = Counter
             .build()
@@ -95,16 +88,11 @@ public class PendingReadsManager {
             .register();
 
     private final RangeEntryCacheImpl rangeEntryCache;
-    private final long readEntryTimeoutMillis;
-    private volatile long estimatedEntrySize = 10 * 1024;
-    private final PendingReadsLimiter pendingReadsLimiter;
     private final ConcurrentHashMap<Long, ConcurrentHashMap<PendingReadKey, PendingRead>> cachedPendingReads =
             new ConcurrentHashMap<>();
 
     public PendingReadsManager(RangeEntryCacheImpl rangeEntryCache) {
         this.rangeEntryCache = rangeEntryCache;
-        this.pendingReadsLimiter = rangeEntryCache.getPendingReadsLimiter();
-        this.readEntryTimeoutMillis = rangeEntryCache.getManagedLedgerConfig().getReadEntryTimeoutSeconds() * 1000;
     }
 
     @Value
@@ -329,17 +317,6 @@ public class PendingReadsManager {
 
     void readEntries(ReadHandle lh, long firstEntry, long lastEntry, boolean shouldCacheEntry,
                      final AsyncCallbacks.ReadEntriesCallback callback, Object ctx) {
-        readEntriesInternal(lh, firstEntry, lastEntry, shouldCacheEntry, callback, ctx, null);
-    }
-    private void readEntriesInternal(ReadHandle lh, long firstEntry, long lastEntry, boolean shouldCacheEntry,
-                     final AsyncCallbacks.ReadEntriesCallback originalCallback, Object ctx,
-                                     PendingReadsLimiter.Handle handle) {
-        final AsyncCallbacks.ReadEntriesCallback callback =
-                handlePendingReadsLimits(lh, firstEntry, lastEntry, shouldCacheEntry,
-                        originalCallback, ctx, handle);
-        if (callback == null) {
-            return;
-        }
         final PendingReadKey key = new PendingReadKey(firstEntry, lastEntry);
 
         Map<PendingReadKey, PendingRead> pendingReadsForLedger =
@@ -465,70 +442,6 @@ public class PendingReadsManager {
         }
     }
 
-    private AsyncCallbacks.ReadEntriesCallback handlePendingReadsLimits(ReadHandle lh,
-                                                                long firstEntry, long lastEntry,
-                                                                boolean shouldCacheEntry,
-                                                                AsyncCallbacks.ReadEntriesCallback originalCallback,
-                                                                Object ctx, PendingReadsLimiter.Handle handle) {
-        if (pendingReadsLimiter.isDisabled()) {
-            return originalCallback;
-        }
-        long estimatedReadSize = (1 + lastEntry - firstEntry)
-                * (estimatedEntrySize + BOOKKEEPER_READ_OVERHEAD_PER_ENTRY);
-        final AsyncCallbacks.ReadEntriesCallback callback;
-        PendingReadsLimiter.Handle newHandle = pendingReadsLimiter.acquire(estimatedReadSize, handle);
-        if (!newHandle.success) {
-            long now = System.currentTimeMillis();
-            if (now - newHandle.creationTime > readEntryTimeoutMillis) {
-                String message = "Time-out elapsed reading from ledger "
-                        + lh.getId()
-                        + ", " + rangeEntryCache.getName()
-                        + ", estimated read size " + estimatedReadSize + " bytes"
-                        + " for " + (1 + lastEntry - firstEntry) + " entries";
-                log.error(message);
-                pendingReadsLimiter.release(newHandle);
-                originalCallback.readEntriesFailed(
-                        new ManagedLedgerException.TooManyRequestsException(message), ctx);
-                return null;
-            }
-            this.rangeEntryCache.ml.getExecutor().submitOrdered(lh.getId(), () -> {
-                readEntriesInternal(lh, firstEntry, lastEntry, shouldCacheEntry,
-                        originalCallback, ctx, newHandle);
-                return null;
-            });
-            return null;
-        } else {
-            callback = new AsyncCallbacks.ReadEntriesCallback() {
-
-                @Override
-                public void readEntriesComplete(List<Entry> entries, Object ctx) {
-                    if (!entries.isEmpty()) {
-                        long size = entries.get(0).getLength();
-                        estimatedEntrySize = size;
-
-                        AtomicInteger remainingCount = new AtomicInteger(entries.size());
-                        for (Entry entry : entries) {
-                            ((EntryImpl) entry).onDellocate(() -> {
-                                if (remainingCount.decrementAndGet() <= 0) {
-                                    pendingReadsLimiter.release(newHandle);
-                                }
-                            });
-                        }
-                    } else {
-                        pendingReadsLimiter.release(newHandle);
-                    }
-                    originalCallback.readEntriesComplete(entries, ctx);
-                }
-
-                @Override
-                public void readEntriesFailed(ManagedLedgerException exception, Object ctx) {
-                    pendingReadsLimiter.release(newHandle);
-                    originalCallback.readEntriesFailed(exception, ctx);
-                }
-            };
-        }
-        return callback;
-    }
 
     void clear() {
         cachedPendingReads.clear();
