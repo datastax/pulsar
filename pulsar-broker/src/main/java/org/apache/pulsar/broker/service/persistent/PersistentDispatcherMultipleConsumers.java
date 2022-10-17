@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.stream.Stream;
+import io.prometheus.client.Gauge;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.ReadEntriesCallback;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
@@ -73,6 +74,12 @@ import org.slf4j.LoggerFactory;
  */
 public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMultipleConsumers
         implements Dispatcher, ReadEntriesCallback {
+
+    private static final Gauge PENDING_BYTES_TO_DISPATCH = Gauge
+            .build()
+            .name("pulsar_ml_pending_bytes_to_dispatch")
+            .help("Amount of bytes loaded in memory to be dispatched to consumers")
+            .register();
 
     protected final PersistentTopic topic;
     protected final ManagedCursor cursor;
@@ -538,6 +545,9 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
             log.debug("[{}] Distributing {} messages to {} consumers", name, entries.size(), consumerList.size());
         }
 
+        long size = entries.stream().mapToLong(Entry::getLength).sum();
+        PENDING_BYTES_TO_DISPATCH.inc(size);
+
         // dispatch messages to a separate thread, but still in order for this subscription
         // sendMessagesToConsumers is responsible for running broker-side filters
         // that may be quite expensive
@@ -547,12 +557,18 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
             sendInProgress = true;
             dispatchMessagesThread.execute(safeRun(() -> {
                 if (sendMessagesToConsumers(readType, entries)) {
+                    PENDING_BYTES_TO_DISPATCH.dec(size);
                     readMoreEntries();
+                } else {
+                    PENDING_BYTES_TO_DISPATCH.dec(size);
                 }
             }));
         } else {
             if (sendMessagesToConsumers(readType, entries)) {
+                PENDING_BYTES_TO_DISPATCH.dec(size);
                 readMoreEntriesAsync();
+            } else {
+                PENDING_BYTES_TO_DISPATCH.dec(size);
             }
         }
     }
