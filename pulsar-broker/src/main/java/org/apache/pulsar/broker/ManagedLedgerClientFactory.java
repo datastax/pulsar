@@ -64,7 +64,7 @@ public class ManagedLedgerClientFactory implements ManagedLedgerStorage {
                 conf.getManagedLedgerCacheEvictionTimeThresholdMillis());
         managedLedgerFactoryConfig.setCopyEntriesInCache(conf.isManagedLedgerCacheCopyEntries());
         managedLedgerFactoryConfig.setMaxPendingReadsBufferSize(
-                conf.getManagedLedgerMaxPendingReadsBufferSizeInMB() * 1024L * 1024L);
+                conf.getManagedLedgerMaxReadsBufferSizeInMB() * 1024L * 1024L);
         managedLedgerFactoryConfig.setPrometheusStatsLatencyRolloverSeconds(
                 conf.getManagedLedgerPrometheusStatsLatencyRolloverSeconds());
         managedLedgerFactoryConfig.setTraceTaskExecution(conf.isManagedLedgerTraceTaskExecution());

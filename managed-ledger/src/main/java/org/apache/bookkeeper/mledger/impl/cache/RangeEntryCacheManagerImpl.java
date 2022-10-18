@@ -51,7 +51,7 @@ public class RangeEntryCacheManagerImpl implements EntryCacheManager {
 
     private final ManagedLedgerFactoryImpl mlFactory;
     protected final ManagedLedgerFactoryMBeanImpl mlFactoryMBean;
-    private final PendingReadsLimiter pendingReadsLimiter;
+    private final ReadBufferSizeLimiter pendingReadsLimiter;
 
     protected static final double MB = 1024 * 1024;
     private static final double evictionTriggerThresholdPercent = 0.98;
@@ -59,7 +59,7 @@ public class RangeEntryCacheManagerImpl implements EntryCacheManager {
 
     public RangeEntryCacheManagerImpl(ManagedLedgerFactoryImpl factory) {
         this.maxSize = factory.getConfig().getMaxCacheSize();
-        this.pendingReadsLimiter = new PendingReadsLimiter(factory.getConfig().getMaxPendingReadsBufferSize());
+        this.pendingReadsLimiter = new ReadBufferSizeLimiter(factory.getConfig().getMaxPendingReadsBufferSize());
         this.evictionTriggerThreshold = (long) (maxSize * evictionTriggerThresholdPercent);
         this.cacheEvictionWatermark = factory.getConfig().getCacheEvictionWatermark();
         this.evictionPolicy = new EntryCacheDefaultEvictionPolicy();
@@ -196,7 +196,7 @@ public class RangeEntryCacheManagerImpl implements EntryCacheManager {
         return returnEntry;
     }
 
-    public PendingReadsLimiter getPendingReadsLimiter() {
+    public ReadBufferSizeLimiter getPendingReadsLimiter() {
         return pendingReadsLimiter;
     }
 

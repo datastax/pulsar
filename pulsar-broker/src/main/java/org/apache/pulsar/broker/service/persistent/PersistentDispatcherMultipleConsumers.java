@@ -22,7 +22,6 @@ import static org.apache.bookkeeper.mledger.util.SafeRun.safeRun;
 import static org.apache.pulsar.broker.service.persistent.PersistentTopic.MESSAGE_RATE_BACKOFF_MS;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import io.prometheus.client.Gauge;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -74,12 +73,6 @@ import org.slf4j.LoggerFactory;
  */
 public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMultipleConsumers
         implements Dispatcher, ReadEntriesCallback {
-
-    private static final Gauge PENDING_BYTES_TO_DISPATCH = Gauge
-            .build()
-            .name("pulsar_ml_pending_bytes_to_dispatch")
-            .help("Amount of bytes loaded in memory to be dispatched to consumers")
-            .register();
 
     protected final PersistentTopic topic;
     protected final ManagedCursor cursor;
@@ -546,7 +539,7 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
         }
 
         long size = entries.stream().mapToLong(Entry::getLength).sum();
-        PENDING_BYTES_TO_DISPATCH.inc(size);
+        updatePendingBytesToDispatch(size);
 
         // dispatch messages to a separate thread, but still in order for this subscription
         // sendMessagesToConsumers is responsible for running broker-side filters
@@ -557,18 +550,18 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
             sendInProgress = true;
             dispatchMessagesThread.execute(safeRun(() -> {
                 if (sendMessagesToConsumers(readType, entries)) {
-                    PENDING_BYTES_TO_DISPATCH.dec(size);
+                    updatePendingBytesToDispatch(-size);
                     readMoreEntries();
                 } else {
-                    PENDING_BYTES_TO_DISPATCH.dec(size);
+                    updatePendingBytesToDispatch(-size);
                 }
             }));
         } else {
             if (sendMessagesToConsumers(readType, entries)) {
-                PENDING_BYTES_TO_DISPATCH.dec(size);
+                updatePendingBytesToDispatch(-size);
                 readMoreEntriesAsync();
             } else {
-                PENDING_BYTES_TO_DISPATCH.dec(size);
+                updatePendingBytesToDispatch(-size);
             }
         }
     }

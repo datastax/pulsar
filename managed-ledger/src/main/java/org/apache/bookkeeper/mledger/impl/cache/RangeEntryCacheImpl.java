@@ -102,7 +102,7 @@ public class RangeEntryCacheImpl implements EntryCache {
     }
 
     @VisibleForTesting
-    PendingReadsLimiter getPendingReadsLimiter() {
+    ReadBufferSizeLimiter getPendingReadsLimiter() {
         return manager.getPendingReadsLimiter();
     }
 
@@ -299,7 +299,7 @@ public class RangeEntryCacheImpl implements EntryCache {
     }
 
     void asyncReadEntry0WithLimits(ReadHandle lh, long firstEntry, long lastEntry, boolean shouldCacheEntry,
-        final ReadEntriesCallback originalCallback, Object ctx, PendingReadsLimiter.Handle handle) {
+        final ReadEntriesCallback originalCallback, Object ctx, ReadBufferSizeLimiter.Handle handle) {
 
         final AsyncCallbacks.ReadEntriesCallback callback =
                 handlePendingReadsLimits(lh, firstEntry, lastEntry, shouldCacheEntry,
@@ -354,15 +354,15 @@ public class RangeEntryCacheImpl implements EntryCache {
                                                                 long firstEntry, long lastEntry,
                                                                 boolean shouldCacheEntry,
                                                                 AsyncCallbacks.ReadEntriesCallback originalCallback,
-                                                                Object ctx, PendingReadsLimiter.Handle handle) {
-        PendingReadsLimiter pendingReadsLimiter = getPendingReadsLimiter();
+                                                                Object ctx, ReadBufferSizeLimiter.Handle handle) {
+        ReadBufferSizeLimiter pendingReadsLimiter = getPendingReadsLimiter();
         if (pendingReadsLimiter.isDisabled()) {
             return originalCallback;
         }
         long estimatedReadSize = (1 + lastEntry - firstEntry)
                 * (estimatedEntrySize + BOOKKEEPER_READ_OVERHEAD_PER_ENTRY);
         final AsyncCallbacks.ReadEntriesCallback callback;
-        PendingReadsLimiter.Handle newHandle = pendingReadsLimiter.acquire(estimatedReadSize, handle);
+        ReadBufferSizeLimiter.Handle newHandle = pendingReadsLimiter.acquire(estimatedReadSize, handle);
         if (!newHandle.success) {
             long now = System.currentTimeMillis();
             if (now - newHandle.creationTime > readEntryTimeoutMillis) {
