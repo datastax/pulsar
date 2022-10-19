@@ -1756,7 +1756,7 @@ public class ServiceConfiguration implements PulsarConfiguration {
     @FieldContext(category = CATEGORY_STORAGE_ML, doc = "Maximum buffer size for bytes read from storage."
             + " This is the memory retained by data read from storage (or cache) until it has been delivered to the"
             + " Consumer Netty channel. Use O to disable")
-    private long managedLedgerMaxReadsBufferSizeInMB = 0;
+    private long managedLedgerMaxReadsInFlightSizeInMB = 0;
 
     @FieldContext(
         category = CATEGORY_STORAGE_ML,

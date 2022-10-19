@@ -29,32 +29,32 @@ public class ReadBufferSizeLimiter {
 
     private static final Gauge PULSAR_ML_READS_BUFFER_SIZE = Gauge
             .build()
-            .name("pulsar_ml_reads_buffer_size_bytes")
+            .name("pulsar_ml_reads_inflight_bytes")
             .help("Estimated number of bytes retained by data read from storage or cache")
             .register();
 
     private static final Gauge PULSAR_ML_READS_AVAILABLE_BUFFER_SIZE = Gauge
             .build()
-            .name("pulsar_ml_reads_available_buffer_size")
-            .help("Available space on the reads buffer")
+            .name("pulsar_ml_reads_available_inflight_bytes")
+            .help("Available space for inflight data read from storage or cache")
             .register();
 
-    private final long maxReadsBufferSize;
-    private long remainingRequestsBytes;
+    private final long maxReadsInFlightSize;
+    private long remainingBytes;
 
-    public ReadBufferSizeLimiter(long maxReadsBufferSize) {
-        if (maxReadsBufferSize <= 0) {
+    public ReadBufferSizeLimiter(long maxReadsInFlightSize) {
+        if (maxReadsInFlightSize <= 0) {
             // set it to -1 in order to show in the metrics that the metric is not available
             PULSAR_ML_READS_BUFFER_SIZE.set(-1);
             PULSAR_ML_READS_AVAILABLE_BUFFER_SIZE.set(-1);
         }
-        this.maxReadsBufferSize = maxReadsBufferSize;
-        this.remainingRequestsBytes = maxReadsBufferSize;
+        this.maxReadsInFlightSize = maxReadsInFlightSize;
+        this.remainingBytes = maxReadsInFlightSize;
     }
 
     @VisibleForTesting
-    public synchronized long getRemainingRequestsBytes() {
-        return remainingRequestsBytes;
+    public synchronized long getRemainingBytes() {
+        return remainingBytes;
     }
 
     @AllArgsConstructor
@@ -70,40 +70,40 @@ public class ReadBufferSizeLimiter {
     private static final Handle DISABLED = new Handle(0, true, 0, -1);
 
     Handle acquire(long permits, Handle current) {
-        if (maxReadsBufferSize <= 0) {
+        if (maxReadsInFlightSize <= 0) {
             // feature is disabled
             return DISABLED;
         }
         synchronized (this) {
             try {
                 if (current == null) {
-                    if (remainingRequestsBytes == 0) {
+                    if (remainingBytes == 0) {
                         return new Handle(0, false, 1, System.currentTimeMillis());
                     }
-                    if (remainingRequestsBytes >= permits) {
-                        remainingRequestsBytes -= permits;
+                    if (remainingBytes >= permits) {
+                        remainingBytes -= permits;
                         return new Handle(permits, true, 1, System.currentTimeMillis());
                     } else {
-                        long possible = remainingRequestsBytes;
-                        remainingRequestsBytes = 0;
+                        long possible = remainingBytes;
+                        remainingBytes = 0;
                         return new Handle(possible, false, 1, System.currentTimeMillis());
                     }
                 } else {
                     if (current.trials >= 4 && current.acquiredPermits > 0) {
-                        remainingRequestsBytes += current.acquiredPermits;
+                        remainingBytes += current.acquiredPermits;
                         return new Handle(0, false, 1, current.creationTime);
                     }
-                    if (remainingRequestsBytes == 0) {
+                    if (remainingBytes == 0) {
                         return new Handle(current.acquiredPermits, false, current.trials + 1,
                                 current.creationTime);
                     }
                     long needed = permits - current.acquiredPermits;
-                    if (remainingRequestsBytes >= needed) {
-                        remainingRequestsBytes -= needed;
+                    if (remainingBytes >= needed) {
+                        remainingBytes -= needed;
                         return new Handle(permits, true, current.trials + 1, current.creationTime);
                     } else {
-                        long possible = remainingRequestsBytes;
-                        remainingRequestsBytes = 0;
+                        long possible = remainingBytes;
+                        remainingBytes = 0;
                         return new Handle(current.acquiredPermits + possible, false,
                                 current.trials + 1, current.creationTime);
                     }
@@ -119,18 +119,18 @@ public class ReadBufferSizeLimiter {
             return;
         }
         synchronized (this) {
-            remainingRequestsBytes += handle.acquiredPermits;
+            remainingBytes += handle.acquiredPermits;
             updateMetrics();
         }
     }
 
     private synchronized void updateMetrics() {
-        PULSAR_ML_READS_BUFFER_SIZE.set(maxReadsBufferSize - remainingRequestsBytes);
-        PULSAR_ML_READS_AVAILABLE_BUFFER_SIZE.set(remainingRequestsBytes);
+        PULSAR_ML_READS_BUFFER_SIZE.set(maxReadsInFlightSize - remainingBytes);
+        PULSAR_ML_READS_AVAILABLE_BUFFER_SIZE.set(remainingBytes);
     }
 
     public boolean isDisabled() {
-        return maxReadsBufferSize <= 0;
+        return maxReadsInFlightSize <= 0;
     }
 
 

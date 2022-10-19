@@ -58,9 +58,9 @@ public class ManagedLedgerFactoryConfig {
     private boolean copyEntriesInCache = false;
 
     /**
-     * Maximum number of (estimated) data in-flight reading from storage.
+     * Maximum number of (estimated) data in-flight reading from storage and the cache.
      */
-    private long maxPendingReadsBufferSize = 0;
+    private long managedLedgerMaxReadsInFlightSize = 0;
 
     /**
      * Whether trace managed ledger task execution time.
