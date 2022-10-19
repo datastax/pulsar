@@ -279,9 +279,12 @@ public class PulsarCommandSenderImpl implements PulsarCommandSender {
             // Use an empty write here so that we can just tie the flush with the write promise for last entry
             ctx.writeAndFlush(Unpooled.EMPTY_BUFFER, writePromise);
             writePromise.addListener((future) -> {
-                // release the entries only after the flush
-                // otherwise we may think that the memory has been released, but that's not correct
-                // this is happening on the same thread as the writes above
+                // release the entries only after flushing the channel
+                //
+                // ReadBufferSizeLimiter tracks the amount of memory retained by in-flight data to the
+                // consumer. It counts the memory as being released when the entry is deallocated
+                // that is that it reaches refcnt=0.
+                // so we need to call release only when we are sure that Netty released the internal ByteBuf
                 entriesToRelease.forEach(Entry::release);
             });
             batchSizes.recyle();
