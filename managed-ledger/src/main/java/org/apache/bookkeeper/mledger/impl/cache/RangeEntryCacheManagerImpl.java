@@ -59,7 +59,8 @@ public class RangeEntryCacheManagerImpl implements EntryCacheManager {
 
     public RangeEntryCacheManagerImpl(ManagedLedgerFactoryImpl factory) {
         this.maxSize = factory.getConfig().getMaxCacheSize();
-        this.pendingReadsLimiter = new ReadBufferSizeLimiter(factory.getConfig().getManagedLedgerMaxReadsInFlightSize());
+        this.pendingReadsLimiter = new ReadBufferSizeLimiter(
+                factory.getConfig().getManagedLedgerMaxReadsInFlightSize());
         this.evictionTriggerThreshold = (long) (maxSize * evictionTriggerThresholdPercent);
         this.cacheEvictionWatermark = factory.getConfig().getCacheEvictionWatermark();
         this.evictionPolicy = new EntryCacheDefaultEvictionPolicy();
