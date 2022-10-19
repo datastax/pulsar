@@ -25,7 +25,7 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class ReadBufferSizeLimiter {
+public class InflightReadsLimiter {
 
     private static final Gauge PULSAR_ML_READS_BUFFER_SIZE = Gauge
             .build()
@@ -42,7 +42,7 @@ public class ReadBufferSizeLimiter {
     private final long maxReadsInFlightSize;
     private long remainingBytes;
 
-    public ReadBufferSizeLimiter(long maxReadsInFlightSize) {
+    public InflightReadsLimiter(long maxReadsInFlightSize) {
         if (maxReadsInFlightSize <= 0) {
             // set it to -1 in order to show in the metrics that the metric is not available
             PULSAR_ML_READS_BUFFER_SIZE.set(-1);

@@ -81,7 +81,7 @@ public class PendingReadsManagerTest  {
 
     RangeEntryCacheImpl rangeEntryCache;
     PendingReadsManager pendingReadsManager;
-    ReadBufferSizeLimiter pendingReadsLimiter;
+    InflightReadsLimiter inflighReadsLimiter;
     ReadHandle lh;
     ManagedLedgerImpl ml;
 
@@ -92,8 +92,8 @@ public class PendingReadsManagerTest  {
         config.setReadEntryTimeoutSeconds(10000);
         when(rangeEntryCache.getName()).thenReturn("my-topic");
         when(rangeEntryCache.getManagedLedgerConfig()).thenReturn(config);
-        pendingReadsLimiter = new ReadBufferSizeLimiter(0);
-        when(rangeEntryCache.getPendingReadsLimiter()).thenReturn(pendingReadsLimiter);
+        inflighReadsLimiter = new InflightReadsLimiter(0);
+        when(rangeEntryCache.getPendingReadsLimiter()).thenReturn(inflighReadsLimiter);
         pendingReadsManager = new PendingReadsManager(rangeEntryCache);
         doAnswer(new Answer() {
             @Override

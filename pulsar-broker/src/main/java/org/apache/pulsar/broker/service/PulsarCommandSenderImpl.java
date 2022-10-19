@@ -281,7 +281,7 @@ public class PulsarCommandSenderImpl implements PulsarCommandSender {
             writePromise.addListener((future) -> {
                 // release the entries only after flushing the channel
                 //
-                // ReadBufferSizeLimiter tracks the amount of memory retained by in-flight data to the
+                // InflightReadsLimiter tracks the amount of memory retained by in-flight data to the
                 // consumer. It counts the memory as being released when the entry is deallocated
                 // that is that it reaches refcnt=0.
                 // so we need to call release only when we are sure that Netty released the internal ByteBuf

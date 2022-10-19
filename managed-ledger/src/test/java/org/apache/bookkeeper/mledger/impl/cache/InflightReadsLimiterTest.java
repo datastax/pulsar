@@ -26,26 +26,26 @@ import lombok.extern.slf4j.Slf4j;
 import org.testng.annotations.Test;
 
 @Slf4j
-public class ReadBufferSizeLimiterTest {
+public class InflightReadsLimiterTest {
 
     @Test
     public void testDisabled() throws Exception {
 
-        ReadBufferSizeLimiter limiter = new ReadBufferSizeLimiter(0);
+        InflightReadsLimiter limiter = new InflightReadsLimiter(0);
         assertTrue(limiter.isDisabled());
 
-        limiter = new ReadBufferSizeLimiter(-1);
+        limiter = new InflightReadsLimiter(-1);
         assertTrue(limiter.isDisabled());
 
-        limiter = new ReadBufferSizeLimiter(1);
+        limiter = new InflightReadsLimiter(1);
         assertFalse(limiter.isDisabled());
     }
 
     @Test
     public void testBasicAcquireRelease() throws Exception {
-        ReadBufferSizeLimiter limiter = new ReadBufferSizeLimiter(100);
+        InflightReadsLimiter limiter = new InflightReadsLimiter(100);
         assertEquals(100, limiter.getRemainingBytes());
-        ReadBufferSizeLimiter.Handle handle = limiter.acquire(100, null);
+        InflightReadsLimiter.Handle handle = limiter.acquire(100, null);
         assertEquals(0, limiter.getRemainingBytes());
         assertTrue(handle.success);
         assertEquals(handle.acquiredPermits, 100);
@@ -56,15 +56,15 @@ public class ReadBufferSizeLimiterTest {
 
     @Test
     public void testNotEnoughPermits() throws Exception {
-        ReadBufferSizeLimiter limiter = new ReadBufferSizeLimiter(100);
+        InflightReadsLimiter limiter = new InflightReadsLimiter(100);
         assertEquals(100, limiter.getRemainingBytes());
-        ReadBufferSizeLimiter.Handle handle = limiter.acquire(100, null);
+        InflightReadsLimiter.Handle handle = limiter.acquire(100, null);
         assertEquals(0, limiter.getRemainingBytes());
         assertTrue(handle.success);
         assertEquals(handle.acquiredPermits, 100);
         assertEquals(1, handle.trials);
 
-        ReadBufferSizeLimiter.Handle handle2 = limiter.acquire(100, null);
+        InflightReadsLimiter.Handle handle2 = limiter.acquire(100, null);
         assertEquals(0, limiter.getRemainingBytes());
         assertFalse(handle2.success);
         assertEquals(handle2.acquiredPermits, 0);
@@ -86,16 +86,16 @@ public class ReadBufferSizeLimiterTest {
 
     @Test
     public void testPartialAcquire() throws Exception {
-        ReadBufferSizeLimiter limiter = new ReadBufferSizeLimiter(100);
+        InflightReadsLimiter limiter = new InflightReadsLimiter(100);
         assertEquals(100, limiter.getRemainingBytes());
 
-        ReadBufferSizeLimiter.Handle handle = limiter.acquire(30, null);
+        InflightReadsLimiter.Handle handle = limiter.acquire(30, null);
         assertEquals(70, limiter.getRemainingBytes());
         assertTrue(handle.success);
         assertEquals(handle.acquiredPermits, 30);
         assertEquals(1, handle.trials);
 
-        ReadBufferSizeLimiter.Handle handle2 = limiter.acquire(100, null);
+        InflightReadsLimiter.Handle handle2 = limiter.acquire(100, null);
         assertEquals(0, limiter.getRemainingBytes());
         assertFalse(handle2.success);
         assertEquals(handle2.acquiredPermits, 70);
@@ -116,16 +116,16 @@ public class ReadBufferSizeLimiterTest {
 
     @Test
     public void testTooManyTrials() throws Exception {
-        ReadBufferSizeLimiter limiter = new ReadBufferSizeLimiter(100);
+        InflightReadsLimiter limiter = new InflightReadsLimiter(100);
         assertEquals(100, limiter.getRemainingBytes());
 
-        ReadBufferSizeLimiter.Handle handle = limiter.acquire(30, null);
+        InflightReadsLimiter.Handle handle = limiter.acquire(30, null);
         assertEquals(70, limiter.getRemainingBytes());
         assertTrue(handle.success);
         assertEquals(handle.acquiredPermits, 30);
         assertEquals(1, handle.trials);
 
-        ReadBufferSizeLimiter.Handle handle2 = limiter.acquire(100, null);
+        InflightReadsLimiter.Handle handle2 = limiter.acquire(100, null);
         assertEquals(0, limiter.getRemainingBytes());
         assertFalse(handle2.success);
         assertEquals(handle2.acquiredPermits, 70);
