@@ -2602,6 +2602,12 @@ public class ServiceConfiguration implements PulsarConfiguration {
     )
     private long transactionPendingAckLogIndexMinLag = 500L;
 
+    @FieldContext(
+            category = CATEGORY_TRANSACTION,
+            doc = "Block transactions if replication is enabled on the namespace/topic."
+    )
+    private boolean blockTransactionsIfReplicationEnabled = false;
+
     /**** --- KeyStore TLS config variables. --- ****/
     @FieldContext(
             category = CATEGORY_KEYSTORE_TLS,

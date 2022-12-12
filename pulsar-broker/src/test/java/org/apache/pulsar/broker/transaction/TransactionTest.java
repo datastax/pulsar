@@ -39,8 +39,10 @@ import io.netty.buffer.Unpooled;
 import io.netty.util.Timeout;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.List;
 import java.util.Optional;
@@ -136,6 +138,7 @@ import org.powermock.reflect.Whitebox;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
@@ -1315,4 +1318,74 @@ public class TransactionTest extends TransactionTestBase {
         Transaction abortingTxn = transaction;
         Awaitility.await().until(() -> abortingTxn.getState() == Transaction.State.ABORTING);
     }
+
+    @DataProvider(name = "BlockTransactionsIfReplicationEnabledValues")
+    public static Object[][] packageNamesProvider() {
+        return new Object[][]{
+                {false},{true}
+        };
+    }
+
+    @Test(dataProvider = "BlockTransactionsIfReplicationEnabledValues")
+    public void testBlockTransactionsIfReplicationEnabled(boolean block) throws Exception {
+        conf.setBlockTransactionsIfReplicationEnabled(block);
+        final String namespace = TENANT + "/txndisabledns";
+        admin.namespaces().createNamespace(namespace);
+        String topic = "persistent://" + namespace + "/block";
+        admin.topics().createNonPartitionedTopic(topic);
+        getPulsarServiceList().get(0)
+                .getPulsarResources()
+                .getNamespaceResources()
+                .setPolicies(NamespaceName.get(namespace), p -> {
+                    p.replication_clusters = new HashSet(Arrays.asList(CLUSTER_NAME, "r1"));
+                    return p;
+                });
+
+        @Cleanup
+        Consumer<byte[]> consumer = getConsumer(topic, "s1");
+        @Cleanup
+        Producer<String> producer = pulsarClient.newProducer(Schema.STRING)
+                .producerName("testBlocked").sendTimeout(0, TimeUnit.SECONDS)
+                .topic(topic).enableBatching(true)
+                .create();
+
+        Transaction transaction = pulsarClient.newTransaction()
+                .withTransactionTimeout(10, TimeUnit.SECONDS).build().get();
+        try {
+            producer.newMessage(transaction)
+                    .value("test")
+                    .send();
+            if (block) {
+                fail();
+            }
+        } catch (PulsarClientException.NotAllowedException notAllowedException) {
+            if (block) {
+                assertEquals(notAllowedException.getMessage(), "Transactions are not allowed "
+                        + "in a namespace with replication enabled");
+            } else {
+                fail("unexpected exception with block=false: " + notAllowedException.getMessage());
+            }
+        }
+
+
+        final MessageId msgNoTxn = producer.newMessage()
+                .value("testnotxn")
+                .send();
+
+        try {
+            consumer.acknowledgeAsync(msgNoTxn, transaction).get();
+            if (block) {
+                fail();
+            }
+        } catch (ExecutionException ex) {
+            if (block) {
+                assertTrue(PulsarClientException.unwrap(ex.getCause()).getMessage()
+                        .contains("Transactions are not allowed in a namespace with replication enabled"));
+            } else {
+                fail("unexpected exception with block=false: " + ex.getCause().getMessage());
+            }
+        }
+        consumer.acknowledgeAsync(msgNoTxn).get();
+    }
+
 }

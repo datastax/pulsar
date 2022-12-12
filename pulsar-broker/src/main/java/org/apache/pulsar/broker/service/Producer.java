@@ -30,6 +30,7 @@ import io.netty.util.Recycler;
 import io.netty.util.Recycler.Handle;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -242,6 +243,25 @@ public class Producer {
 
         startPublishOperation((int) batchSize, headersAndPayload.readableBytes());
         return true;
+    }
+
+    private boolean checkCanProduceTxnOnTopic(long sequenceId, ByteBuf headersAndPayload) {
+        if (cnx.getBrokerService().pulsar().getConfiguration().isBlockTransactionsIfReplicationEnabled()) {
+            final List<String> clusters = topic.getHierarchyTopicPolicies().getReplicationClusters().get();
+            if (clusters.size() == 1
+                    && clusters.get(0).equals(topic.getBrokerService().getPulsar().getConfig().getClusterName())) {
+                return true;
+            }
+            cnx.execute(() -> {
+                cnx.getCommandSender().sendSendError(producerId,
+                        sequenceId, ServerError.NotAllowedError,
+                        "Transactions are not allowed in a namespace with replication enabled");
+                cnx.completedSendOperation(isNonPersistentTopic, headersAndPayload.readableBytes());
+            });
+            return false;
+        } else {
+            return true;
+        }
     }
 
     private void publishMessageToTopic(ByteBuf headersAndPayload, long sequenceId, long batchSize, boolean isChunked,
@@ -729,6 +749,9 @@ public class Producer {
 
     public void publishTxnMessage(TxnID txnID, long producerId, long sequenceId, long highSequenceId,
                                   ByteBuf headersAndPayload, long batchSize, boolean isChunked, boolean isMarker) {
+        if (!checkCanProduceTxnOnTopic(sequenceId, headersAndPayload)) {
+            return;
+        }
         checkAndStartPublish(producerId, sequenceId, headersAndPayload, batchSize);
         topic.publishTxnMessage(txnID, headersAndPayload,
                 MessagePublishContext.get(this, sequenceId, highSequenceId, msgIn,

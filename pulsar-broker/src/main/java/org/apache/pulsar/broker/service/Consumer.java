@@ -53,6 +53,7 @@ import org.apache.pulsar.common.api.proto.CommandSubscribe.SubType;
 import org.apache.pulsar.common.api.proto.KeyLongValue;
 import org.apache.pulsar.common.api.proto.KeySharedMeta;
 import org.apache.pulsar.common.api.proto.MessageIdData;
+import org.apache.pulsar.common.api.proto.ServerError;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.stats.ConsumerStatsImpl;
 import org.apache.pulsar.common.protocol.Commands;
@@ -385,6 +386,14 @@ public class Consumer {
                 .collect(Collectors.toMap(KeyLongValue::getKey, KeyLongValue::getValue));
         }
 
+        if (ack.hasTxnidMostBits() && ack.hasTxnidLeastBits() && !isTransactionAllowedOnTopic()) {
+            final CompletableFuture<Void> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new BrokerServiceException.NotAllowedException(
+                    "Transactions are not allowed in a namespace with replication enabled"
+            ));
+            return failed;
+        }
+
         if (ack.getAckType() == AckType.Cumulative) {
             if (ack.getMessageIdsCount() != 1) {
                 log.warn("[{}] [{}] Received multi-message ack", subscription, consumerId);
@@ -662,6 +671,19 @@ public class Consumer {
         return subscription instanceof PersistentSubscription
                 && ((PersistentTopic) subscription.getTopic())
                 .getBrokerService().getPulsar().getConfig().isTransactionCoordinatorEnabled();
+    }
+
+    private boolean isTransactionAllowedOnTopic() {
+        if (!(subscription instanceof PersistentSubscription)) {
+            return false;
+        }
+        final PersistentTopic topic = (PersistentTopic) subscription.getTopic();
+        if (!topic.getBrokerService().getPulsar().getConfig().isBlockTransactionsIfReplicationEnabled()) {
+            return true;
+        }
+        final List<String> clusters = topic.getHierarchyTopicPolicies().getReplicationClusters().get();
+        return clusters.size() == 1
+                && clusters.get(0).equals(topic.getBrokerService().getPulsar().getConfig().getClusterName());
     }
 
     private CompletableFuture<Void> transactionIndividualAcknowledge(
