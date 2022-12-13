@@ -42,6 +42,7 @@ import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.apache.commons.lang3.tuple.MutablePair;
+import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.service.persistent.PersistentSubscription;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.client.api.MessageId;
@@ -134,6 +135,7 @@ public class Consumer {
     private final String clientAddress; // IP address only, no port number included
     private final MessageId startMessageId;
     private final boolean isAcknowledgmentAtBatchIndexLevelEnabled;
+    private final boolean allowTransactions;
 
     @Getter
     @Setter
@@ -188,10 +190,11 @@ public class Consumer {
         stats.setClientVersion(cnx.getClientVersion());
         stats.metadata = this.metadata;
 
+        final ServiceConfiguration serviceConfiguration = subscription.getTopic().getBrokerService()
+                .getPulsar().getConfiguration();
         if (Subscription.isIndividualAckMode(subType)) {
             this.pendingAcks = ConcurrentLongLongPairHashMap.newBuilder()
-                    .autoShrink(subscription.getTopic().getBrokerService()
-                            .getPulsar().getConfiguration().isAutoShrinkForConsumerPendingAcksMap())
+                    .autoShrink(serviceConfiguration.isAutoShrinkForConsumerPendingAcksMap())
                     .expectedItems(256)
                     .concurrencyLevel(1)
                     .build();
@@ -202,8 +205,8 @@ public class Consumer {
 
         this.clientAddress = cnx.clientSourceAddress();
         this.consumerEpoch = consumerEpoch;
-        this.isAcknowledgmentAtBatchIndexLevelEnabled = subscription.getTopic().getBrokerService()
-                .getPulsar().getConfiguration().isAcknowledgmentAtBatchIndexLevelEnabled();
+        this.isAcknowledgmentAtBatchIndexLevelEnabled = serviceConfiguration.isAcknowledgmentAtBatchIndexLevelEnabled();
+        this.allowTransactions = isTransactionAllowedOnTopic();
     }
 
     public SubType subType() {
@@ -386,7 +389,7 @@ public class Consumer {
                 .collect(Collectors.toMap(KeyLongValue::getKey, KeyLongValue::getValue));
         }
 
-        if (ack.hasTxnidMostBits() && ack.hasTxnidLeastBits() && !isTransactionAllowedOnTopic()) {
+        if (ack.hasTxnidMostBits() && ack.hasTxnidLeastBits() && !allowTransactions) {
             final CompletableFuture<Void> failed = new CompletableFuture<>();
             failed.completeExceptionally(new BrokerServiceException.NotAllowedException(
                     "Transactions are not allowed in a namespace with replication enabled"

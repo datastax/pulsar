@@ -86,6 +86,7 @@ public class Producer {
     private final String remoteCluster;
     private final boolean isNonPersistentTopic;
     private final boolean isEncrypted;
+    private final boolean allowTransactions;
 
     private final ProducerAccessMode accessMode;
     private Optional<Long> topicEpoch;
@@ -150,6 +151,17 @@ public class Producer {
         this.schemaVersion = schemaVersion;
         this.accessMode = accessMode;
         this.topicEpoch = topicEpoch;
+        if (serviceConf.isBlockTransactionsIfReplicationEnabled()) {
+            final List<String> clusters = topic.getHierarchyTopicPolicies().getReplicationClusters().get();
+            if (clusters.size() == 1
+                    && clusters.get(0).equals(serviceConf.getClusterName())) {
+                this.allowTransactions = true;
+            } else {
+                this.allowTransactions = false;
+            }
+        } else {
+            this.allowTransactions = true;
+        }
 
         this.clientAddress = cnx.clientSourceAddress();
     }
@@ -246,22 +258,16 @@ public class Producer {
     }
 
     private boolean checkCanProduceTxnOnTopic(long sequenceId, ByteBuf headersAndPayload) {
-        if (cnx.getBrokerService().pulsar().getConfiguration().isBlockTransactionsIfReplicationEnabled()) {
-            final List<String> clusters = topic.getHierarchyTopicPolicies().getReplicationClusters().get();
-            if (clusters.size() == 1
-                    && clusters.get(0).equals(topic.getBrokerService().getPulsar().getConfig().getClusterName())) {
-                return true;
-            }
-            cnx.execute(() -> {
-                cnx.getCommandSender().sendSendError(producerId,
-                        sequenceId, ServerError.NotAllowedError,
-                        "Transactions are not allowed in a namespace with replication enabled");
-                cnx.completedSendOperation(isNonPersistentTopic, headersAndPayload.readableBytes());
-            });
-            return false;
-        } else {
+        if (allowTransactions) {
             return true;
         }
+        cnx.execute(() -> {
+            cnx.getCommandSender().sendSendError(producerId,
+                    sequenceId, ServerError.NotAllowedError,
+                    "Transactions are not allowed in a namespace with replication enabled");
+            cnx.completedSendOperation(isNonPersistentTopic, headersAndPayload.readableBytes());
+        });
+        return false;
     }
 
     private void publishMessageToTopic(ByteBuf headersAndPayload, long sequenceId, long batchSize, boolean isChunked,
