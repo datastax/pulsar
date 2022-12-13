@@ -1415,7 +1415,6 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
 
         List<CompletableFuture<Void>> futures = Lists.newArrayList();
 
-        System.out.println("checking..");
         // Check for missing replicators
         for (String cluster : configuredClusters) {
             if (cluster.equals(localCluster)) {
