@@ -118,6 +118,7 @@ import org.apache.pulsar.common.events.EventsTopicNames;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicDomain;
 import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.ManagedLedgerInternalStats;
 import org.apache.pulsar.common.policies.data.RetentionPolicies;
 import org.apache.pulsar.common.policies.data.TopicPolicies;
@@ -1329,6 +1330,10 @@ public class TransactionTest extends TransactionTestBase {
     @Test(dataProvider = "BlockTransactionsIfReplicationEnabledValues")
     public void testBlockTransactionsIfReplicationEnabled(boolean block) throws Exception {
         conf.setBlockTransactionsIfReplicationEnabled(block);
+        admin.clusters().createCluster("r1", ClusterData.builder()
+                .serviceUrl(getPulsarServiceList().get(0).getWebServiceAddress())
+                .build()
+        );
         final String namespace = TENANT + "/txndisabledns";
         admin.namespaces().createNamespace(namespace);
         String topic = "persistent://" + namespace + "/block";
@@ -1340,6 +1345,13 @@ public class TransactionTest extends TransactionTestBase {
                     p.replication_clusters = new HashSet(Arrays.asList(CLUSTER_NAME, "r1"));
                     return p;
                 });
+        getPulsarServiceList().get(0)
+                .getBrokerService()
+                .getTopic(topic, false)
+                .get()
+                .get()
+                .checkReplication()
+                .get();
 
         @Cleanup
         Consumer<byte[]> consumer = getConsumer(topic, "s1");

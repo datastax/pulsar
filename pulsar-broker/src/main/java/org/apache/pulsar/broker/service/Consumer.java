@@ -54,7 +54,6 @@ import org.apache.pulsar.common.api.proto.CommandSubscribe.SubType;
 import org.apache.pulsar.common.api.proto.KeyLongValue;
 import org.apache.pulsar.common.api.proto.KeySharedMeta;
 import org.apache.pulsar.common.api.proto.MessageIdData;
-import org.apache.pulsar.common.api.proto.ServerError;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.stats.ConsumerStatsImpl;
 import org.apache.pulsar.common.protocol.Commands;
@@ -135,7 +134,7 @@ public class Consumer {
     private final String clientAddress; // IP address only, no port number included
     private final MessageId startMessageId;
     private final boolean isAcknowledgmentAtBatchIndexLevelEnabled;
-    private final boolean allowTransactions;
+    private final boolean blockTransactionsIfReplicationEnabled;
 
     @Getter
     @Setter
@@ -206,7 +205,7 @@ public class Consumer {
         this.clientAddress = cnx.clientSourceAddress();
         this.consumerEpoch = consumerEpoch;
         this.isAcknowledgmentAtBatchIndexLevelEnabled = serviceConfiguration.isAcknowledgmentAtBatchIndexLevelEnabled();
-        this.allowTransactions = isTransactionAllowedOnTopic();
+        this.blockTransactionsIfReplicationEnabled = serviceConfiguration.isBlockTransactionsIfReplicationEnabled();
     }
 
     public SubType subType() {
@@ -389,7 +388,11 @@ public class Consumer {
                 .collect(Collectors.toMap(KeyLongValue::getKey, KeyLongValue::getValue));
         }
 
-        if (ack.hasTxnidMostBits() && ack.hasTxnidLeastBits() && !allowTransactions) {
+        if (subscription instanceof PersistentSubscription
+                && ack.hasTxnidMostBits()
+                && ack.hasTxnidLeastBits()
+                && blockTransactionsIfReplicationEnabled
+                && subscription.getTopic().isReplicated()) {
             final CompletableFuture<Void> failed = new CompletableFuture<>();
             failed.completeExceptionally(new BrokerServiceException.NotAllowedException(
                     "Transactions are not allowed in a namespace with replication enabled"
@@ -674,19 +677,6 @@ public class Consumer {
         return subscription instanceof PersistentSubscription
                 && ((PersistentTopic) subscription.getTopic())
                 .getBrokerService().getPulsar().getConfig().isTransactionCoordinatorEnabled();
-    }
-
-    private boolean isTransactionAllowedOnTopic() {
-        if (!(subscription instanceof PersistentSubscription)) {
-            return false;
-        }
-        final PersistentTopic topic = (PersistentTopic) subscription.getTopic();
-        if (!topic.getBrokerService().getPulsar().getConfig().isBlockTransactionsIfReplicationEnabled()) {
-            return true;
-        }
-        final List<String> clusters = topic.getHierarchyTopicPolicies().getReplicationClusters().get();
-        return clusters.size() == 1
-                && clusters.get(0).equals(topic.getBrokerService().getPulsar().getConfig().getClusterName());
     }
 
     private CompletableFuture<Void> transactionIndividualAcknowledge(
