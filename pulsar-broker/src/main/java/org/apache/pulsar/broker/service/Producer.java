@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import org.apache.pulsar.broker.ServiceConfiguration;
+import org.apache.pulsar.broker.intercept.BrokerInterceptor;
 import org.apache.pulsar.broker.service.BrokerServiceException.TopicClosedException;
 import org.apache.pulsar.broker.service.BrokerServiceException.TopicTerminatedException;
 import org.apache.pulsar.broker.service.Topic.PublishContext;
@@ -68,6 +69,7 @@ public class Producer {
     private final boolean userProvidedProducerName;
     private final long producerId;
     private final String appId;
+    private final BrokerInterceptor brokerInterceptor;
     private Rate msgIn;
     private Rate chunkedMessageRate;
     // it records msg-drop rate only for non-persistent topic
@@ -85,6 +87,7 @@ public class Producer {
     private final String remoteCluster;
     private final boolean isNonPersistentTopic;
     private final boolean isEncrypted;
+    private final boolean blockTransactionsIfReplicationEnabled;
 
     private final ProducerAccessMode accessMode;
     private Optional<Long> topicEpoch;
@@ -149,8 +152,10 @@ public class Producer {
         this.schemaVersion = schemaVersion;
         this.accessMode = accessMode;
         this.topicEpoch = topicEpoch;
+        this.blockTransactionsIfReplicationEnabled = serviceConf.isBlockTransactionsIfReplicationEnabled();
 
         this.clientAddress = cnx.clientSourceAddress();
+        this.brokerInterceptor = cnx.getBrokerService().getInterceptor();
     }
 
     /**
@@ -241,6 +246,19 @@ public class Producer {
         }
 
         startPublishOperation((int) batchSize, headersAndPayload.readableBytes());
+        return true;
+    }
+
+    private boolean checkCanProduceTxnOnTopic(long sequenceId, ByteBuf headersAndPayload) {
+        if (blockTransactionsIfReplicationEnabled && topic.isReplicated()) {
+            cnx.execute(() -> {
+                cnx.getCommandSender().sendSendError(producerId,
+                        sequenceId, ServerError.NotAllowedError,
+                        "Transactions are not allowed in a namespace with replication enabled");
+                cnx.completedSendOperation(isNonPersistentTopic, headersAndPayload.readableBytes());
+            });
+            return false;
+        }
         return true;
     }
 
@@ -483,8 +501,8 @@ public class Producer {
                 producer.chunkedMessageRate.recordEvent();
             }
             producer.publishOperationCompleted();
-            if (producer.cnx.getBrokerService().getInterceptor() != null){
-                producer.cnx.getBrokerService().getInterceptor().messageProduced(
+            if (producer.brokerInterceptor != null) {
+                producer.brokerInterceptor.messageProduced(
                         (ServerCnx) producer.cnx, producer, startTimeNs, ledgerId, entryId, this);
             }
             recycle();
@@ -729,6 +747,9 @@ public class Producer {
 
     public void publishTxnMessage(TxnID txnID, long producerId, long sequenceId, long highSequenceId,
                                   ByteBuf headersAndPayload, long batchSize, boolean isChunked, boolean isMarker) {
+        if (!checkCanProduceTxnOnTopic(sequenceId, headersAndPayload)) {
+            return;
+        }
         checkAndStartPublish(producerId, sequenceId, headersAndPayload, batchSize);
         topic.publishTxnMessage(txnID, headersAndPayload,
                 MessagePublishContext.get(this, sequenceId, highSequenceId, msgIn,

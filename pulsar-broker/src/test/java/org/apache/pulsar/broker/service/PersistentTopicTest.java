@@ -19,8 +19,8 @@
 package org.apache.pulsar.broker.service;
 
 import static org.apache.pulsar.broker.BrokerTestUtil.spyWithClassAndConstructorArgs;
+import static org.apache.pulsar.broker.BrokerTestUtil.spyWithClassAndConstructorArgsRecordingInvocations;
 import static org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest.createMockBookKeeper;
-import static org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest.createMockZooKeeper;
 import static org.apache.pulsar.common.protocol.Commands.DEFAULT_CONSUMER_EPOCH;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -129,19 +129,20 @@ import org.apache.pulsar.common.api.proto.ProducerAccessMode;
 import org.apache.pulsar.common.naming.NamespaceBundle;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.partition.PartitionedTopicMetadata;
 import org.apache.pulsar.common.policies.data.Policies;
 import org.apache.pulsar.common.policies.data.TopicPolicies;
 import org.apache.pulsar.common.policies.data.stats.SubscriptionStatsImpl;
 import org.apache.pulsar.common.protocol.ByteBufPair;
 import org.apache.pulsar.common.protocol.schema.SchemaVersion;
 import org.apache.pulsar.common.util.Codec;
+import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.pulsar.common.util.collections.ConcurrentOpenHashMap;
 import org.apache.pulsar.compaction.CompactedTopic;
 import org.apache.pulsar.compaction.CompactedTopicContext;
 import org.apache.pulsar.compaction.Compactor;
-import org.apache.pulsar.metadata.api.MetadataStore;
-import org.apache.pulsar.metadata.impl.ZKMetadataStore;
-import org.apache.zookeeper.ZooKeeper;
+import org.apache.pulsar.metadata.api.MetadataStoreException;
+import org.apache.pulsar.metadata.impl.FaultInjectionMetadataStore;
 import org.awaitility.Awaitility;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -161,7 +162,6 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
     private SchemaRegistryService schemaRegistryService;
     private ManagedLedgerFactory mlFactoryMock;
     private ServerCnx serverCnx;
-    private MetadataStore store;
     private ManagedLedger ledgerMock;
     private ManagedCursor cursorMock;
 
@@ -202,17 +202,15 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
             return null;
         }).when(mlFactoryMock).asyncDelete(any(), any(), any());
         // Mock metaStore.
-        ZooKeeper mockZk = createMockZooKeeper();
         doReturn(createMockBookKeeper(executor))
             .when(pulsar).getBookKeeperClient();
         doReturn(executor).when(pulsar).getOrderedExecutor();
-        store = new ZKMetadataStore(mockZk);
-        doReturn(store).when(pulsar).getLocalMetadataStore();
-        doReturn(store).when(pulsar).getConfigurationMetadataStore();
+        doReturn(metadataStore).when(pulsar).getLocalMetadataStore();
+        doReturn(metadataStore).when(pulsar).getConfigurationMetadataStore();
         // Mock pulsarResources.
-        PulsarResources pulsarResources = spyWithClassAndConstructorArgs(PulsarResources.class, store, store);
-        NamespaceResources nsr = spyWithClassAndConstructorArgs(NamespaceResources.class, store, store, 30);
-        TopicResources tsr = spyWithClassAndConstructorArgs(TopicResources.class, store);
+        PulsarResources pulsarResources = spyWithClassAndConstructorArgs(PulsarResources.class, metadataStore, metadataStore);
+        NamespaceResources nsr = spyWithClassAndConstructorArgs(NamespaceResources.class, metadataStore, metadataStore, 30);
+        TopicResources tsr = spyWithClassAndConstructorArgs(TopicResources.class, metadataStore);
         doReturn(nsr).when(pulsarResources).getNamespaceResources();
         doReturn(tsr).when(pulsarResources).getTopicResources();
         PulsarServiceMockSupport.mockPulsarServiceProps(pulsar, () -> {
@@ -224,7 +222,7 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
             doReturn(brokerService).when(pulsar).getBrokerService();
         });
         // Mock serviceCnx.
-        serverCnx = spyWithClassAndConstructorArgs(ServerCnx.class, pulsar);
+        serverCnx = spyWithClassAndConstructorArgsRecordingInvocations(ServerCnx.class, pulsar);
         doReturn(true).when(serverCnx).isActive();
         doReturn(true).when(serverCnx).isWritable();
         doReturn(new InetSocketAddress("localhost", 1234)).when(serverCnx).clientAddress();
@@ -371,7 +369,7 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
 
     @Test
     public void testDispatcherMultiConsumerReadFailed() throws Exception {
-        PersistentTopic topic = spyWithClassAndConstructorArgs(PersistentTopic.class, successTopicName, ledgerMock, brokerService);
+        PersistentTopic topic = spyWithClassAndConstructorArgsRecordingInvocations(PersistentTopic.class, successTopicName, ledgerMock, brokerService);
         ManagedCursor cursor = mock(ManagedCursor.class);
         when(cursor.getName()).thenReturn("cursor");
         Subscription subscription = mock(Subscription.class);
@@ -383,7 +381,7 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
 
     @Test
     public void testDispatcherSingleConsumerReadFailed() throws Exception {
-        PersistentTopic topic = spyWithClassAndConstructorArgs(PersistentTopic.class, successTopicName, ledgerMock, brokerService);
+        PersistentTopic topic = spyWithClassAndConstructorArgsRecordingInvocations(PersistentTopic.class, successTopicName, ledgerMock, brokerService);
         ManagedCursor cursor = mock(ManagedCursor.class);
         when(cursor.getName()).thenReturn("cursor");
         PersistentDispatcherSingleActiveConsumer dispatcher = new PersistentDispatcherSingleActiveConsumer(cursor,
@@ -1614,6 +1612,45 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
             }).when(cursorMock).asyncMarkDelete(any(), any(), any(MarkDeleteCallback.class), any());
     }
 
+
+    @Test
+    public void testDeleteTopicDeleteOnMetadataStoreFailed() throws Exception {
+
+        doReturn(CompletableFuture.completedFuture(null)).when(ledgerMock).asyncTruncate();
+
+        // create topic
+        brokerService.pulsar().getPulsarResources().getNamespaceResources().getPartitionedTopicResources()
+                .createPartitionedTopic(TopicName.get(successTopicName), new PartitionedTopicMetadata(2));
+        PersistentTopic topic = (PersistentTopic) brokerService.getOrCreateTopic(successTopicName).get();
+
+        Field isFencedField = AbstractTopic.class.getDeclaredField("isFenced");
+        isFencedField.setAccessible(true);
+        Field isClosingOrDeletingField = PersistentTopic.class.getDeclaredField("isClosingOrDeleting");
+        isClosingOrDeletingField.setAccessible(true);
+
+        assertFalse((boolean) isFencedField.get(topic));
+        assertFalse((boolean) isClosingOrDeletingField.get(topic));
+
+        metadataStore.failConditional(new MetadataStoreException("injected error"), (op, path) -> {
+            if (op == FaultInjectionMetadataStore.OperationType.PUT
+                && path.equals("/admin/partitioned-topics/prop/use/ns-abc/persistent/successTopic")) {
+                return true;
+            }
+            return false;
+        });
+        try {
+            topic.delete().get();
+            fail();
+        } catch (ExecutionException e) {
+            final Throwable t = FutureUtil.unwrapCompletionException(e);
+            assertTrue(t.getMessage().contains("injected error"));
+        }
+        assertFalse((boolean) isFencedField.get(topic));
+        assertFalse((boolean) isClosingOrDeletingField.get(topic));
+
+    }
+
+
     @Test
     public void testFailoverSubscription() throws Exception {
         PersistentTopic topic1 = new PersistentTopic(successTopicName, ledgerMock, brokerService);
@@ -2113,13 +2150,13 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
                         .concurrencyLevel(1)
                         .build();
         // This subscription is connected by consumer.
-        PersistentSubscription nonDeletableSubscription1 = spyWithClassAndConstructorArgs(PersistentSubscription.class, topic, "nonDeletableSubscription1", cursorMock, false);
+        PersistentSubscription nonDeletableSubscription1 = spyWithClassAndConstructorArgsRecordingInvocations(PersistentSubscription.class, topic, "nonDeletableSubscription1", cursorMock, false);
         subscriptions.put(nonDeletableSubscription1.getName(), nonDeletableSubscription1);
         // This subscription is not connected by consumer.
-        PersistentSubscription deletableSubscription1 = spyWithClassAndConstructorArgs(PersistentSubscription.class, topic, "deletableSubscription1", cursorMock, false);
+        PersistentSubscription deletableSubscription1 = spyWithClassAndConstructorArgsRecordingInvocations(PersistentSubscription.class, topic, "deletableSubscription1", cursorMock, false);
         subscriptions.put(deletableSubscription1.getName(), deletableSubscription1);
         // This subscription is replicated.
-        PersistentSubscription nonDeletableSubscription2 = spyWithClassAndConstructorArgs(PersistentSubscription.class, topic, "nonDeletableSubscription2", cursorMock, true);
+        PersistentSubscription nonDeletableSubscription2 = spyWithClassAndConstructorArgsRecordingInvocations(PersistentSubscription.class, topic, "nonDeletableSubscription2", cursorMock, true);
         subscriptions.put(nonDeletableSubscription2.getName(), nonDeletableSubscription2);
 
         Field field = topic.getClass().getDeclaredField("subscriptions");
@@ -2329,8 +2366,8 @@ public class PersistentTopicTest extends MockedBookKeeperTestCase {
         topic.initialize();
         assertEquals(topic.getHierarchyTopicPolicies().getReplicationClusters().get(), Collections.emptyList());
 
-        PulsarResources pulsarResources = spyWithClassAndConstructorArgs(PulsarResources.class, store, store);
-        NamespaceResources nsr = spyWithClassAndConstructorArgs(NamespaceResources.class, store, store, 30);
+        PulsarResources pulsarResources = spyWithClassAndConstructorArgs(PulsarResources.class, metadataStore, metadataStore);
+        NamespaceResources nsr = spyWithClassAndConstructorArgs(NamespaceResources.class, metadataStore, metadataStore, 30);
         doReturn(nsr).when(pulsarResources).getNamespaceResources();
         PulsarServiceMockSupport.mockPulsarServiceProps(pulsar, () -> {
             doReturn(pulsarResources).when(pulsar).getPulsarResources();

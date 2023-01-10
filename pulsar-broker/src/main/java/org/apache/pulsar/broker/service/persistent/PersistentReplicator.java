@@ -51,6 +51,7 @@ import org.apache.pulsar.broker.service.Replicator;
 import org.apache.pulsar.broker.service.persistent.DispatchRateLimiter.Type;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.transaction.TxnID;
 import org.apache.pulsar.client.impl.Backoff;
 import org.apache.pulsar.client.impl.MessageImpl;
 import org.apache.pulsar.client.impl.ProducerImpl;
@@ -58,6 +59,7 @@ import org.apache.pulsar.client.impl.PulsarClientImpl;
 import org.apache.pulsar.client.impl.SendCallback;
 import org.apache.pulsar.common.api.proto.MarkerType;
 import org.apache.pulsar.common.policies.data.stats.ReplicatorStatsImpl;
+import org.apache.pulsar.common.protocol.Markers;
 import org.apache.pulsar.common.schema.SchemaInfo;
 import org.apache.pulsar.common.stats.Rate;
 import org.apache.pulsar.common.util.Codec;
@@ -67,7 +69,7 @@ import org.slf4j.LoggerFactory;
 public class PersistentReplicator extends AbstractReplicator
         implements Replicator, ReadEntriesCallback, DeleteCallback {
 
-    private final PersistentTopic topic;
+    protected final PersistentTopic topic;
     protected final ManagedCursor cursor;
 
     private Optional<DispatchRateLimiter> dispatchRateLimiter = Optional.empty();
@@ -250,7 +252,7 @@ public class PersistentReplicator extends AbstractReplicator
                             messagesToRead);
                 }
                 cursor.asyncReadEntriesOrWait(messagesToRead, readMaxSizeBytes, this,
-                        null, PositionImpl.LATEST);
+                        null, topic.getMaxReadPosition());
             } else {
                 if (log.isDebugEnabled()) {
                     log.debug("[{}][{} -> {}] Not scheduling read due to pending read. Messages To Read {}", topicName,
@@ -317,6 +319,23 @@ public class PersistentReplicator extends AbstractReplicator
                     cursor.asyncDelete(entry.getPosition(), this, entry.getPosition());
                     entry.release();
                     continue;
+                }
+
+                if (Markers.isTxnMarker(msg.getMessageBuilder())) {
+                    cursor.asyncDelete(entry.getPosition(), this, entry.getPosition());
+                    entry.release();
+                    msg.recycle();
+                    continue;
+                }
+                if (msg.getMessageBuilder().hasTxnidLeastBits() && msg.getMessageBuilder().hasTxnidMostBits()) {
+                    TxnID tx = new TxnID(msg.getMessageBuilder().getTxnidMostBits(),
+                            msg.getMessageBuilder().getTxnidLeastBits());
+                    if (topic.isTxnAborted(tx)) {
+                        cursor.asyncDelete(entry.getPosition(), this, entry.getPosition());
+                        entry.release();
+                        msg.recycle();
+                        continue;
+                    }
                 }
 
                 if (isEnableReplicatedSubscriptions) {
@@ -403,6 +422,8 @@ public class PersistentReplicator extends AbstractReplicator
                     });
                 } else {
                     msg.setSchemaInfoForReplicator(schemaFuture.get());
+                    msg.getMessageBuilder().clearTxnidMostBits();
+                    msg.getMessageBuilder().clearTxnidLeastBits();
                     producer.sendAsync(msg, ProducerSendCallback.create(this, entry, msg));
                     atLeastOneMessageSentForReplication = true;
                 }

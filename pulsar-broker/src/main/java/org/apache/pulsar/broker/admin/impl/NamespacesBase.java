@@ -227,24 +227,29 @@ public abstract class NamespacesBase extends AdminResource {
                          }))
                 .thenCompose(topics -> {
                     List<String> allTopics = topics.get(0);
+                    ArrayList<String> allUserCreatedTopics = new ArrayList<>();
                     List<String> allPartitionedTopics = topics.get(1);
+                    ArrayList<String> allUserCreatedPartitionTopics = new ArrayList<>();
+                    boolean hasNonSystemTopic = false;
+                    List<String> allSystemTopics = new ArrayList<>();
+                    List<String> allPartitionedSystemTopics = new ArrayList<>();
+                    for (String topic : allTopics) {
+                        if (!pulsar().getBrokerService().isSystemTopic(TopicName.get(topic))) {
+                            hasNonSystemTopic = true;
+                            allUserCreatedTopics.add(topic);
+                        } else {
+                            allSystemTopics.add(topic);
+                        }
+                    }
+                    for (String topic : allPartitionedTopics) {
+                        if (!pulsar().getBrokerService().isSystemTopic(TopicName.get(topic))) {
+                            hasNonSystemTopic = true;
+                            allUserCreatedPartitionTopics.add(topic);
+                        } else {
+                            allPartitionedSystemTopics.add(topic);
+                        }
+                    }
                     if (!force) {
-                        boolean hasNonSystemTopic = false;
-                        for (String topic : allTopics) {
-                            if (!pulsar().getBrokerService().isSystemTopic(TopicName.get(topic))) {
-                                hasNonSystemTopic = true;
-                                break;
-                            }
-                        }
-                        if (!hasNonSystemTopic) {
-                            for (String topic : allPartitionedTopics) {
-                                if (!pulsar().getBrokerService().isSystemTopic(TopicName.get(topic))) {
-                                    hasNonSystemTopic = true;
-                                    break;
-                                }
-                            }
-                        }
-
                         if (hasNonSystemTopic) {
                             throw new RestException(Status.CONFLICT, "Cannot delete non empty namespace");
                         }
@@ -252,10 +257,14 @@ public abstract class NamespacesBase extends AdminResource {
                     return namespaceResources().setPoliciesAsync(namespaceName, old -> {
                         old.deleted = true;
                         return  old;
-                    }).thenCompose(__ -> {
-                        return internalDeleteTopicsAsync(allTopics);
-                    }).thenCompose(__ -> {
-                        return internalDeletePartitionedTopicsAsync(allPartitionedTopics);
+                    }).thenCompose(ignore -> {
+                        return internalDeleteTopicsAsync(allUserCreatedTopics);
+                    }).thenCompose(ignore -> {
+                        return internalDeletePartitionedTopicsAsync(allUserCreatedPartitionTopics);
+                    }).thenCompose(ignore -> {
+                        return internalDeleteTopicsAsync(allSystemTopics);
+                    }).thenCompose(ignore__ -> {
+                        return internalDeletePartitionedTopicsAsync(allPartitionedSystemTopics);
                     });
                 })
                 .thenCompose(__ -> pulsar().getNamespaceService()
@@ -1013,6 +1022,10 @@ public abstract class NamespacesBase extends AdminResource {
         log.info("[{}] Split namespace bundle {}/{}", clientAppId(), namespaceName, bundleName);
 
         String bundleRange = getBundleRange(bundleName);
+        if (bundleRange == null) {
+            throw new RestException(Status.NOT_FOUND,
+                    String.format("Bundle range %s not found", bundleName));
+        }
 
         Policies policies = getNamespacePolicies(namespaceName);
 
@@ -1120,13 +1133,18 @@ public abstract class NamespacesBase extends AdminResource {
     }
 
     private String getBundleRange(String bundleName) {
+        NamespaceBundle nsBundle;
         if (BundleType.LARGEST.toString().equals(bundleName)) {
-            return findLargestBundleWithTopics(namespaceName).getBundleRange();
+            nsBundle = findLargestBundleWithTopics(namespaceName);
         } else if (BundleType.HOT.toString().equals(bundleName)) {
-            return findHotBundle(namespaceName).getBundleRange();
+            nsBundle = findHotBundle(namespaceName);
         } else {
             return bundleName;
         }
+        if (nsBundle == null) {
+            return null;
+        }
+        return nsBundle.getBundleRange();
     }
 
     private NamespaceBundle findLargestBundleWithTopics(NamespaceName namespaceName) {
@@ -2227,7 +2245,8 @@ public abstract class NamespacesBase extends AdminResource {
     protected long internalGetOffloadThreshold() {
         validateNamespacePolicyOperation(namespaceName, PolicyName.OFFLOAD, PolicyOperation.READ);
         Policies policies = getNamespacePolicies(namespaceName);
-        if (policies.offload_policies == null) {
+        if (policies.offload_policies == null
+                || policies.offload_policies.getManagedLedgerOffloadThresholdInBytes() == null) {
             return policies.offload_threshold;
         } else {
             return policies.offload_policies.getManagedLedgerOffloadThresholdInBytes();

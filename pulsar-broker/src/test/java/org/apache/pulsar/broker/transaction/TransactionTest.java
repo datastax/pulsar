@@ -39,8 +39,11 @@ import io.netty.buffer.Unpooled;
 import io.netty.util.Timeout;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.List;
 import java.util.Optional;
@@ -116,6 +119,7 @@ import org.apache.pulsar.common.events.EventsTopicNames;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicDomain;
 import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.ManagedLedgerInternalStats;
 import org.apache.pulsar.common.policies.data.RetentionPolicies;
 import org.apache.pulsar.common.policies.data.TopicPolicies;
@@ -136,6 +140,7 @@ import org.powermock.reflect.Whitebox;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
@@ -157,6 +162,8 @@ public class TransactionTest extends TransactionTestBase {
     public void testCreateTransactionSystemTopic() throws Exception {
         String subName = "test";
         String topicName = TopicName.get(NAMESPACE1 + "/" + "testCreateTransactionSystemTopic").toString();
+        admin.namespaces().deleteNamespace(NAMESPACE1, true);
+        admin.namespaces().createNamespace(NAMESPACE1);
 
         try {
             // init pending ack
@@ -173,7 +180,7 @@ public class TransactionTest extends TransactionTestBase {
 
         // getList does not include transaction system topic
         List<String> list = admin.topics().getList(NAMESPACE1);
-        assertEquals(list.size(), 4);
+        assertFalse(list.isEmpty());
         list.forEach(topic -> assertFalse(topic.contains(PENDING_ACK_STORE_SUFFIX)));
 
         try {
@@ -894,6 +901,7 @@ public class TransactionTest extends TransactionTestBase {
     public void testAutoCreateSchemaForTransactionSnapshot() throws Exception {
         String namespace = TENANT + "/ns2";
         String topic = namespace + "/test";
+
         pulsarServiceList.forEach((pulsarService ->
                 pulsarService.getConfiguration().setAllowAutoUpdateSchemaEnabled(false)));
         admin.namespaces().createNamespace(namespace);
@@ -1263,5 +1271,157 @@ public class TransactionTest extends TransactionTestBase {
             Throwable t = executionException.getCause();
             Assert.assertTrue(t instanceof BrokerServiceException.ServiceUnitNotReadyException);
         }
+    }
+
+    @Test
+    public void testGetTxnState() throws Exception {
+        Transaction transaction = pulsarClient.newTransaction().withTransactionTimeout(1, TimeUnit.SECONDS)
+                .build().get();
+
+        // test OPEN and TIMEOUT
+        assertEquals(transaction.getState(), Transaction.State.OPEN);
+        Transaction timeoutTxn = transaction;
+        Awaitility.await().until(() -> timeoutTxn.getState() == Transaction.State.TIME_OUT);
+
+        // test abort
+        transaction = pulsarClient.newTransaction().withTransactionTimeout(3, TimeUnit.SECONDS)
+                .build().get();
+        transaction.abort().get();
+        assertEquals(transaction.getState(), Transaction.State.ABORTED);
+
+        // test commit
+        transaction = pulsarClient.newTransaction().withTransactionTimeout(3, TimeUnit.SECONDS)
+                .build().get();
+        transaction.commit().get();
+        assertEquals(transaction.getState(), Transaction.State.COMMITTED);
+
+        // test error
+        transaction = pulsarClient.newTransaction().withTransactionTimeout(1, TimeUnit.SECONDS)
+                .build().get();
+        pulsarServiceList.get(0).getTransactionMetadataStoreService()
+                .endTransaction(transaction.getTxnID(), 0, false);
+        transaction.commit();
+        Transaction errorTxn = transaction;
+        Awaitility.await().until(() -> errorTxn.getState() == Transaction.State.ERROR);
+
+        // test committing
+        transaction = pulsarClient.newTransaction().withTransactionTimeout(3, TimeUnit.SECONDS)
+                .build().get();
+        ((TransactionImpl) transaction).registerSendOp(new CompletableFuture<>());
+        transaction.commit();
+        Transaction committingTxn = transaction;
+        Awaitility.await().until(() -> committingTxn.getState() == Transaction.State.COMMITTING);
+
+        // test aborting
+        transaction = pulsarClient.newTransaction().withTransactionTimeout(3, TimeUnit.SECONDS)
+                .build().get();
+        ((TransactionImpl) transaction).registerSendOp(new CompletableFuture<>());
+        transaction.abort();
+        Transaction abortingTxn = transaction;
+        Awaitility.await().until(() -> abortingTxn.getState() == Transaction.State.ABORTING);
+    }
+
+    @DataProvider(name = "BlockTransactionsIfReplicationEnabledValues")
+    public static Object[][] packageNamesProvider() {
+        return new Object[][]{
+                {false},{true}
+        };
+    }
+
+    @Test(dataProvider = "BlockTransactionsIfReplicationEnabledValues")
+    public void testBlockTransactionsIfReplicationEnabled(boolean block) throws Exception {
+        conf.setBlockTransactionsIfReplicationEnabled(block);
+        admin.clusters().createCluster("r1", ClusterData.builder()
+                .serviceUrl(getPulsarServiceList().get(0).getWebServiceAddress())
+                .build()
+        );
+        final String namespace = TENANT + "/txndisabledns";
+        admin.namespaces().createNamespace(namespace);
+        String topic = "persistent://" + namespace + "/block";
+        admin.topics().createNonPartitionedTopic(topic);
+        getPulsarServiceList().get(0)
+                .getPulsarResources()
+                .getNamespaceResources()
+                .setPolicies(NamespaceName.get(namespace), p -> {
+                    p.replication_clusters = new HashSet(Arrays.asList(CLUSTER_NAME, "r1"));
+                    return p;
+                });
+        getPulsarServiceList().get(0)
+                .getBrokerService()
+                .getTopic(topic, false)
+                .get()
+                .get()
+                .checkReplication()
+                .get();
+
+        @Cleanup
+        Consumer<byte[]> consumer = getConsumer(topic, "s1");
+        @Cleanup
+        Producer<String> producer = pulsarClient.newProducer(Schema.STRING)
+                .producerName("testBlocked").sendTimeout(0, TimeUnit.SECONDS)
+                .topic(topic).enableBatching(true)
+                .create();
+
+        Transaction transaction = pulsarClient.newTransaction()
+                .withTransactionTimeout(10, TimeUnit.SECONDS).build().get();
+        try {
+            producer.newMessage(transaction)
+                    .value("test")
+                    .send();
+            if (block) {
+                fail();
+            }
+        } catch (PulsarClientException.NotAllowedException notAllowedException) {
+            if (block) {
+                assertEquals(notAllowedException.getMessage(), "Transactions are not allowed "
+                        + "in a namespace with replication enabled");
+            } else {
+                fail("unexpected exception with block=false: " + notAllowedException.getMessage());
+            }
+        }
+
+
+        final MessageId msgNoTxn = producer.newMessage()
+                .value("testnotxn")
+                .send();
+
+        try {
+            consumer.acknowledgeAsync(msgNoTxn, transaction).get();
+            if (block) {
+                fail();
+            }
+        } catch (ExecutionException ex) {
+            if (block) {
+                assertTrue(PulsarClientException.unwrap(ex.getCause()).getMessage()
+                        .contains("Transactions are not allowed in a namespace with replication enabled"));
+            } else {
+                fail("unexpected exception with block=false: " + ex.getCause().getMessage());
+            }
+        }
+        consumer.acknowledgeAsync(msgNoTxn).get();
+    }
+
+    @Test
+    public void testEncryptionRequired() throws Exception {
+        final String namespace = "tnx/ns-prechecks";
+        final String topic = "persistent://" + namespace + "/test_transaction_topic";
+        admin.namespaces().createNamespace(namespace);
+        admin.namespaces().setEncryptionRequiredStatus(namespace, true);
+        admin.topics().createNonPartitionedTopic(topic);
+
+        @Cleanup
+        Producer<byte[]> producer = this.pulsarClient.newProducer()
+                .topic(topic)
+                .sendTimeout(5, TimeUnit.SECONDS)
+                .addEncryptionKey("my-app-key")
+                .defaultCryptoKeyReader("file:./src/test/resources/certificate/public-key.client-rsa.pem")
+                .create();
+
+        Transaction txn = pulsarClient.newTransaction()
+                .withTransactionTimeout(5, TimeUnit.SECONDS).build().get();
+        producer.newMessage(txn)
+                    .value(UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8))
+                    .send();
+        txn.commit();
     }
 }

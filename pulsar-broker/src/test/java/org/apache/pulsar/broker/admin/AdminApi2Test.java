@@ -1339,6 +1339,13 @@ public class AdminApi2Test extends MockedPulsarServiceBaseTest {
 
     @Test
     public void testDeleteTenant() throws Exception {
+        // Disabled conf: systemTopicEnabled. see: https://github.com/apache/pulsar/pull/17070
+        boolean originalSystemTopicEnabled = conf.isSystemTopicEnabled();
+        if (originalSystemTopicEnabled) {
+            internalCleanup();
+            conf.setSystemTopicEnabled(false);
+            setup();
+        }
         pulsar.getConfiguration().setForceDeleteNamespaceAllowed(false);
 
         String tenant = "test-tenant-1";
@@ -1387,6 +1394,12 @@ public class AdminApi2Test extends MockedPulsarServiceBaseTest {
         assertFalse(pulsar.getLocalMetadataStore().exists(partitionedTopicPath).join());
         assertFalse(pulsar.getLocalMetadataStore().exists(localPoliciesPath).join());
         assertFalse(pulsar.getLocalMetadataStore().exists(bundleDataPath).join());
+        // Reset conf: systemTopicEnabled
+        if (originalSystemTopicEnabled) {
+            internalCleanup();
+            conf.setSystemTopicEnabled(true);
+            setup();
+        }
     }
 
     @Test
@@ -1487,6 +1500,7 @@ public class AdminApi2Test extends MockedPulsarServiceBaseTest {
         stopBroker();
         conf.setSystemTopicEnabled(true);
         conf.setTopicLevelPoliciesEnabled(true);
+        conf.setForceDeleteNamespaceAllowed(true);
         setup();
 
         String tenant = "test-tenant";
@@ -1499,6 +1513,11 @@ public class AdminApi2Test extends MockedPulsarServiceBaseTest {
 
         // create namespace2
         String namespace = tenant + "/test-ns2";
+        admin.namespaces().createNamespace(namespace, Sets.newHashSet("test"));
+        admin.topics().createNonPartitionedTopic(namespace + "/tobedeleted");
+        // verify namespace can be deleted even without topic policy events
+        admin.namespaces().deleteNamespace(namespace, true);
+
         admin.namespaces().createNamespace(namespace, Sets.newHashSet("test"));
         // create topic
         String topic = namespace + "/test-topic2";
@@ -1721,7 +1740,9 @@ public class AdminApi2Test extends MockedPulsarServiceBaseTest {
 
     @Test
     public void testForceDeleteNamespace() throws Exception {
+        stopBroker();
         conf.setForceDeleteNamespaceAllowed(true);
+        setup();
         final String namespaceName = "prop-xyz2/ns1";
         TenantInfoImpl tenantInfo = new TenantInfoImpl(Sets.newHashSet("role1", "role2"), Sets.newHashSet("test"));
         admin.tenants().createTenant("prop-xyz2", tenantInfo);

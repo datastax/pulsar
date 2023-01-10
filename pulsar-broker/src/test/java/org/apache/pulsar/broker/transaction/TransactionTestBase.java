@@ -48,7 +48,10 @@ import org.apache.pulsar.broker.auth.SameThreadOrderedSafeExecutor;
 import org.apache.pulsar.broker.intercept.CounterBrokerInterceptor;
 import org.apache.pulsar.broker.namespace.NamespaceService;
 import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.admin.PulsarAdminBuilder;
+import org.apache.pulsar.client.api.ClientBuilder;
 import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.ClusterData;
@@ -87,19 +90,49 @@ public abstract class TransactionTestBase extends TestRetrySupport {
     protected ServiceConfiguration conf = new ServiceConfiguration();
 
     public void internalSetup() throws Exception {
+        internalSetup(false);
+    }
+
+    public void internalSetupAndInitCluster() throws Exception {
+        internalSetup(true);
+    }
+
+    private void internalSetup(boolean initializeCluster) throws Exception {
         incrementSetupNumber();
         init();
 
         if (admin != null) {
             admin.close();
         }
-        admin = spy(PulsarAdmin.builder().serviceHttpUrl(pulsarServiceList.get(0).getWebServiceAddress()).build());
+        admin = spy(createNewPulsarAdmin(PulsarAdmin.builder()
+                .serviceHttpUrl(pulsarServiceList.get(0).getWebServiceAddress())));
+
+        if (initializeCluster) {
+            String[] brokerServiceUrlArr = getPulsarServiceList().get(0).getBrokerServiceUrl().split(":");
+            String webServicePort = brokerServiceUrlArr[brokerServiceUrlArr.length - 1];
+            admin.clusters().createCluster(CLUSTER_NAME,
+                    ClusterData.builder().serviceUrl("http://localhost:" + webServicePort).build());
+            admin.tenants().createTenant(NamespaceName.SYSTEM_NAMESPACE.getTenant(),
+                    new TenantInfoImpl(Sets.newHashSet("appid1"), Sets.newHashSet(CLUSTER_NAME)));
+            admin.namespaces().createNamespace(NamespaceName.SYSTEM_NAMESPACE.toString());
+            admin.topics().createPartitionedTopic(TopicName.TRANSACTION_COORDINATOR_ASSIGN.toString(), 1);
+        }
 
         if (pulsarClient != null) {
             pulsarClient.shutdown();
         }
-        pulsarClient = PulsarClient.builder().serviceUrl(pulsarServiceList.get(0).getBrokerServiceUrl()).build();
+        pulsarClient = createNewPulsarClient(PulsarClient.builder()
+                .serviceUrl(pulsarServiceList.get(0).getBrokerServiceUrl()));
     }
+
+    protected PulsarClient createNewPulsarClient(ClientBuilder clientBuilder) throws PulsarClientException {
+        return clientBuilder.build();
+    }
+
+    protected PulsarAdmin createNewPulsarAdmin(PulsarAdminBuilder builder) throws PulsarClientException {
+        return builder.build();
+    }
+
 
     private void init() throws Exception {
         mockZooKeeper = createMockZooKeeper();
@@ -165,9 +198,9 @@ public abstract class TransactionTestBase extends TestRetrySupport {
             conf.setTransactionCoordinatorEnabled(true);
             conf.setBrokerDeduplicationEnabled(true);
             conf.setSystemTopicEnabled(true);
+            conf.setTopicLevelPoliciesEnabled(true);
             conf.setTransactionBufferSnapshotMaxTransactionCount(2);
             conf.setTransactionBufferSnapshotMinTimeInMillis(2000);
-            conf.setTopicLevelPoliciesEnabled(true);
             serviceConfigurationList.add(conf);
 
             PulsarService pulsar = spyWithClassAndConstructorArgs(PulsarService.class, conf);
