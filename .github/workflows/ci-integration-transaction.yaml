@@ -21,7 +21,7 @@ name: CI - Integration - Transaction
 on:
   pull_request:
     branches:
-      - branch-*
+      - 2.10_ds
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
