@@ -330,11 +330,18 @@ public class ProxyConnection extends PulsarHandler {
             // and we'll take care of just topics and
             // partitions metadata lookups
             state = State.ProxyLookupRequests;
-            lookupProxyHandler =
-                Reflections.createInstance(service.getConfiguration().getLookupHandler(), LookupProxyHandler.class,
-                    Thread.currentThread()
-                        .getContextClassLoader());
-            lookupProxyHandler.initialize(service, this);
+            try {
+                lookupProxyHandler =
+                    Reflections.createInstance(service.getConfiguration().getLookupHandler(), LookupProxyHandler.class,
+                        Thread.currentThread()
+                            .getContextClassLoader());
+                lookupProxyHandler.initialize(service, this);
+            } catch (Exception e) {
+                LOG.error("Failed to initialize lookup proxy handler", e);
+                ctx().writeAndFlush(Commands.newError(-1, ServerError.ServiceNotReady,
+                        "Failed to initialize lookup proxy handler")).addListener(ChannelFutureListener.CLOSE);
+                return;
+            }
             ctx.writeAndFlush(Commands.newConnected(protocolVersionToAdvertise))
                     .addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         }

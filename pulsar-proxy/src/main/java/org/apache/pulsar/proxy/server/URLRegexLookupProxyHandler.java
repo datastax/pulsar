@@ -18,6 +18,7 @@
  */
 package org.apache.pulsar.proxy.server;
 
+import com.google.common.base.Strings;
 import org.apache.pulsar.common.api.proto.CommandLookupTopic;
 import org.apache.pulsar.common.api.proto.CommandLookupTopicResponse;
 import org.apache.pulsar.common.api.proto.ServerError;
@@ -37,8 +38,14 @@ public class URLRegexLookupProxyHandler extends DefaultLookupProxyHandler {
     public void initialize(ProxyService proxy, ProxyConnection proxyConnection) {
         super.initialize(proxy, proxyConnection);
         this.regex = proxy.getConfiguration().getProperties().getProperty("urlRegexLookupProxyHandlerRegex");
+        if (Strings.isNullOrEmpty(this.regex)) {
+            throw new IllegalArgumentException("urlRegexLookupProxyHandlerRegex is not set");
+        }
         this.replacement =
             proxy.getConfiguration().getProperties().getProperty("urlRegexLookupProxyHandlerReplacement");
+        if (Strings.isNullOrEmpty(this.replacement)) {
+            throw new IllegalArgumentException("urlRegexLookupProxyHandlerReplacement is not set");
+        }
     }
 
     @Override
@@ -83,7 +90,7 @@ public class URLRegexLookupProxyHandler extends DefaultLookupProxyHandler {
                                     } else {
                                         proxyConnection.ctx().writeAndFlush(
                                             Commands.newLookupErrorResponse(ServerError.ServiceNotReady,
-                                                String.format("Broker URL %sdoes not match lookup handler regex",
+                                                String.format("Broker URL %s does not match the lookup handler regex",
                                                     brokerUrl), clientRequestId));
                                     }
                                 });
