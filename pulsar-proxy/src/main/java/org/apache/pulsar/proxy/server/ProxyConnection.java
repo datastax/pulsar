@@ -65,6 +65,7 @@ import org.apache.pulsar.common.api.proto.ProtocolVersion;
 import org.apache.pulsar.common.api.proto.ServerError;
 import org.apache.pulsar.common.protocol.Commands;
 import org.apache.pulsar.common.protocol.PulsarHandler;
+import org.apache.pulsar.common.util.Reflections;
 import org.apache.pulsar.policies.data.loadbalancer.ServiceLookupData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -329,7 +330,11 @@ public class ProxyConnection extends PulsarHandler {
             // and we'll take care of just topics and
             // partitions metadata lookups
             state = State.ProxyLookupRequests;
-            lookupProxyHandler = new LookupProxyHandler(service, this);
+            lookupProxyHandler =
+                Reflections.createInstance(service.getConfiguration().getLookupHandler(), LookupProxyHandler.class,
+                    Thread.currentThread()
+                        .getContextClassLoader());
+            lookupProxyHandler.initialize(service, this);
             ctx.writeAndFlush(Commands.newConnected(protocolVersionToAdvertise))
                     .addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         }
