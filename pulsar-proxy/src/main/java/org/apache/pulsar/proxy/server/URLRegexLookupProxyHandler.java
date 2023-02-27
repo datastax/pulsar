@@ -81,17 +81,33 @@ public class URLRegexLookupProxyHandler extends DefaultLookupProxyHandler {
                         performLookup(clientRequestId, lookup.getTopic(), serviceUrl, false, 10)
                             .whenComplete(
                                 (brokerUrl, ex) -> {
-                                    if (brokerUrl.matches(regex)) {
-                                        String proxyUrl = brokerUrl.replaceAll(regex, replacement);
-                                        proxyConnection.ctx().writeAndFlush(
-                                            Commands.newLookupResponse(proxyUrl, proxyUrl, true,
-                                                CommandLookupTopicResponse.LookupType.Redirect, clientRequestId,
-                                                false));
-                                    } else {
+                                    try {
+                                        if (brokerUrl.matches(regex)) {
+                                            if (log.isDebugEnabled()) {
+                                                log.debug("Broker URL {} matches regex {}", brokerUrl, regex);
+                                            }
+                                            String proxyUrl = brokerUrl.replaceAll(regex, replacement);
+                                            if (log.isDebugEnabled()) {
+                                                log.debug("Redirect to proxy URL {}", proxyUrl);
+                                            }
+                                            proxyConnection.ctx().writeAndFlush(
+                                                Commands.newLookupResponse(proxyUrl, proxyUrl, true,
+                                                    CommandLookupTopicResponse.LookupType.Redirect, clientRequestId,
+                                                    false));
+                                        } else {
+                                            if (log.isDebugEnabled()) {
+                                                log.debug("Broker URL {} doesn't match regex {}", brokerUrl, regex);
+                                            }
+                                            proxyConnection.ctx().writeAndFlush(
+                                                Commands.newLookupErrorResponse(ServerError.ServiceNotReady,
+                                                    String.format(
+                                                        "Broker URL %s does not match the lookup handler regex",
+                                                        brokerUrl), clientRequestId));
+                                        }
+                                    } catch (IllegalArgumentException iae) {
                                         proxyConnection.ctx().writeAndFlush(
                                             Commands.newLookupErrorResponse(ServerError.ServiceNotReady,
-                                                String.format("Broker URL %s does not match the lookup handler regex",
-                                                    brokerUrl), clientRequestId));
+                                                iae.getMessage(), clientRequestId));
                                     }
                                 });
 
