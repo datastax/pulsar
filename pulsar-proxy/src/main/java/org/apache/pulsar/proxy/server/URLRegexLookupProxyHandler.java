@@ -19,6 +19,8 @@
 package org.apache.pulsar.proxy.server;
 
 import com.google.common.base.Strings;
+import java.util.Properties;
+import java.util.regex.Pattern;
 import org.apache.pulsar.common.api.proto.CommandLookupTopic;
 import org.apache.pulsar.common.api.proto.CommandLookupTopicResponse;
 import org.apache.pulsar.common.api.proto.ServerError;
@@ -30,19 +32,20 @@ public class URLRegexLookupProxyHandler extends DefaultLookupProxyHandler {
 
     private static final Logger log = LoggerFactory.getLogger(URLRegexLookupProxyHandler.class);
 
-    private String regex;
+    private Pattern pattern;
 
     private String replacement;
 
     @Override
     public void initialize(ProxyService proxy, ProxyConnection proxyConnection) {
         super.initialize(proxy, proxyConnection);
-        this.regex = proxy.getConfiguration().getProperties().getProperty("urlRegexLookupProxyHandlerRegex");
-        if (Strings.isNullOrEmpty(this.regex)) {
+        Properties properties = proxy.getConfiguration().getProperties();
+        String regex = properties.getProperty("urlRegexLookupProxyHandlerRegex");
+        if (Strings.isNullOrEmpty(regex)) {
             throw new IllegalArgumentException("urlRegexLookupProxyHandlerRegex is not set");
         }
-        this.replacement =
-            proxy.getConfiguration().getProperties().getProperty("urlRegexLookupProxyHandlerReplacement");
+        this.pattern = Pattern.compile(regex);
+        this.replacement = properties.getProperty("urlRegexLookupProxyHandlerReplacement");
         if (Strings.isNullOrEmpty(this.replacement)) {
             throw new IllegalArgumentException("urlRegexLookupProxyHandlerReplacement is not set");
         }
@@ -82,11 +85,11 @@ public class URLRegexLookupProxyHandler extends DefaultLookupProxyHandler {
                             .whenComplete(
                                 (brokerUrl, ex) -> {
                                     try {
-                                        if (brokerUrl.matches(regex)) {
+                                        if (pattern.matcher(brokerUrl).matches()) {
                                             if (log.isDebugEnabled()) {
-                                                log.debug("Broker URL {} matches regex {}", brokerUrl, regex);
+                                                log.debug("Broker URL {} matches regex {}", brokerUrl, pattern);
                                             }
-                                            String proxyUrl = brokerUrl.replaceAll(regex, replacement);
+                                            String proxyUrl = pattern.matcher(brokerUrl).replaceAll(replacement);
                                             if (log.isDebugEnabled()) {
                                                 log.debug("Redirect to proxy URL {}", proxyUrl);
                                             }
@@ -96,13 +99,12 @@ public class URLRegexLookupProxyHandler extends DefaultLookupProxyHandler {
                                                     false));
                                         } else {
                                             if (log.isDebugEnabled()) {
-                                                log.debug("Broker URL {} doesn't match regex {}", brokerUrl, regex);
+                                                log.debug("Broker URL {} doesn't match regex {}", brokerUrl, pattern);
                                             }
                                             proxyConnection.ctx().writeAndFlush(
                                                 Commands.newLookupErrorResponse(ServerError.ServiceNotReady,
-                                                    String.format(
-                                                        "Broker URL %s does not match the lookup handler regex",
-                                                        brokerUrl), clientRequestId));
+                                                    "Broker URL does not match the lookup handler regex",
+                                                    clientRequestId));
                                         }
                                     } catch (IllegalArgumentException iae) {
                                         proxyConnection.ctx().writeAndFlush(
