@@ -36,11 +36,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
 import lombok.SneakyThrows;
 import org.apache.bookkeeper.client.api.DigestType;
 import org.apache.bookkeeper.client.api.LastConfirmedAndEntry;
@@ -54,6 +57,7 @@ import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.LedgerOffloader;
 import org.apache.bookkeeper.mledger.ManagedCursor;
 import org.apache.bookkeeper.mledger.ManagedLedgerConfig;
+import org.apache.bookkeeper.mledger.OffloadedLedgerHandle;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.ManagedLedgerInfo.LedgerInfo;
 import org.apache.bookkeeper.mledger.util.MockClock;
 import org.apache.bookkeeper.net.BookieId;
@@ -211,6 +215,10 @@ public class OffloadPrefixReadTest extends MockedBookKeeperTestCase {
                 OffloadPoliciesImpl.DEFAULT_OFFLOAD_DELETION_LAG_IN_MILLIS,
                 OffloadPoliciesImpl.DEFAULT_OFFLOADED_READ_PRIORITY);
 
+        Set<Long> offloadedLedgers() {
+            return offloads.values().stream().map(ReadHandle::getId).collect(Collectors.toSet());
+        }
+        
 
         @Override
         public String getOffloadDriverName() {
@@ -271,10 +279,11 @@ public class OffloadPrefixReadTest extends MockedBookKeeperTestCase {
         }
     }
 
-    static class MockOffloadReadHandle implements ReadHandle {
+    static class MockOffloadReadHandle implements ReadHandle, OffloadedLedgerHandle {
         final long id;
         final List<ByteBuf> entries = Lists.newArrayList();
         final LedgerMetadata metadata;
+        long lastAccessTimestamp = System.currentTimeMillis();
 
         MockOffloadReadHandle(ReadHandle toCopy) throws Exception {
             id = toCopy.getId();
@@ -351,6 +360,15 @@ public class OffloadPrefixReadTest extends MockedBookKeeperTestCase {
             CompletableFuture<T> future = new CompletableFuture<>();
             future.completeExceptionally(new UnsupportedOperationException());
             return future;
+        }
+
+        @Override
+        public long lastAccessTimestamp() {
+            return lastAccessTimestamp;
+        }
+
+        public void setLastAccessTimestamp(long lastAccessTimestamp) {
+            this.lastAccessTimestamp = lastAccessTimestamp;
         }
     }
 
