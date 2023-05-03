@@ -101,8 +101,8 @@ public class ElasticBulkProcessor implements BulkProcessor {
             sourceLength = request.getDocumentSource().getBytes(StandardCharsets.UTF_8).length;
         }
         if (log.isDebugEnabled()) {
-            log.debug("append index request id={}, type={}, source={}, length={}", request.getDocumentId(), config.getTypeName(),
-                    mapped, sourceLength);
+            log.debug("append index request id={}, type={}, source={}, length={}",
+                    request.getDocumentId(), config.getTypeName(), mapped, sourceLength);
         }
         add(BulkOperationWithPulsarRecord.indexOperation(indexOperation, request.getRecord(), sourceLength));
     }
