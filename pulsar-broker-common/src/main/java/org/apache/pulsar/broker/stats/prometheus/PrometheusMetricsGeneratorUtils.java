@@ -35,7 +35,6 @@ import org.apache.pulsar.common.util.SimpleTextOutputStream;
  * Format specification can be found at {@link https://prometheus.io/docs/instrumenting/exposition_formats/}
  */
 public class PrometheusMetricsGeneratorUtils {
-    
     private static final Pattern METRIC_LABEL_VALUE_SPECIAL_CHARACTERS = Pattern.compile("[\\\\\"\\n]");
 
     public static void generate(String cluster, OutputStream out,

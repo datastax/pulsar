@@ -215,7 +215,8 @@ public class PrometheusMetricsGenerator {
                     if (metric.getKey().isEmpty() || "cluster".equals(metric.getKey())) {
                         continue;
                     }
-                    final String metricValue = PrometheusMetricsGeneratorUtils.writeEscapedLabelValue(metric.getValue());
+                    final String metricValue = PrometheusMetricsGeneratorUtils
+                            .writeEscapedLabelValue(metric.getValue());
                     stream.write(", ").write(metric.getKey()).write("=\"").write(metricValue).write('"');
                     if (value != null && !value.isEmpty() && !appendedQuantile) {
                         stream.write(", ").write("quantile=\"").write(PrometheusMetricsGeneratorUtils
