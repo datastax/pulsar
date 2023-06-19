@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.pulsar.common.allocator.PulsarByteBufAllocator;
 import org.apache.pulsar.common.util.SimpleTextOutputStream;
@@ -34,6 +35,8 @@ import org.apache.pulsar.common.util.SimpleTextOutputStream;
  * Format specification can be found at {@link https://prometheus.io/docs/instrumenting/exposition_formats/}
  */
 public class PrometheusMetricsGeneratorUtils {
+    
+    private static final Pattern METRIC_LABEL_VALUE_SPECIAL_CHARACTERS = Pattern.compile("[\\\\\"\\n]");
 
     public static void generate(String cluster, OutputStream out,
                                 List<PrometheusRawMetricsProvider> metricsProviders)
@@ -117,6 +120,9 @@ public class PrometheusMetricsGeneratorUtils {
         if (s == null) {
             return null;
         }
+        if (!labelValueNeedsEscape(s)) {
+            return s;
+        }
         StringBuilder writer = new StringBuilder();
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
@@ -135,6 +141,10 @@ public class PrometheusMetricsGeneratorUtils {
             }
         }
         return writer.toString();
+    }
+
+    static boolean labelValueNeedsEscape(String s) {
+        return METRIC_LABEL_VALUE_SPECIAL_CHARACTERS.matcher(s).find();
     }
 
 }
