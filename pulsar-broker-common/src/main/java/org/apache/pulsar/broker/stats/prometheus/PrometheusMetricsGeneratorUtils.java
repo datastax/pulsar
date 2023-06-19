@@ -68,17 +68,14 @@ public class PrometheusMetricsGeneratorUtils {
                 stream.write(sample.name);
                 stream.write("{");
                 if (!sample.labelNames.contains("cluster")) {
-                    stream.write("cluster=\"").write(cluster).write('"');
+                    stream.write("cluster=\"").write(writeEscapedLabelValue(cluster)).write('"');
                     // If label is empty, should not append ','.
                     if (!CollectionUtils.isEmpty(sample.labelNames)){
                         stream.write(",");
                     }
                 }
                 for (int j = 0; j < sample.labelNames.size(); j++) {
-                    String labelValue = sample.labelValues.get(j);
-                    if (labelValue != null) {
-                        labelValue = labelValue.replace("\"", "\\\"");
-                    }
+                    String labelValue = writeEscapedLabelValue(sample.labelValues.get(j));
                     if (j > 0) {
                         stream.write(",");
                     }
@@ -109,6 +106,35 @@ public class PrometheusMetricsGeneratorUtils {
             default:
                 return "untyped";
         }
+    }
+
+
+    /**
+     * Write a label value to the writer, escaping backslashes, double quotes and newlines.
+     * See Promethues Exporter io.prometheus.client.exporter.common.TextFormat#writeEscapedLabelValue
+     */
+    public static String writeEscapedLabelValue(String s) {
+        if (s == null) {
+            return null;
+        }
+        StringBuilder writer = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\':
+                    writer.append("\\\\");
+                    break;
+                case '\"':
+                    writer.append("\\\"");
+                    break;
+                case '\n':
+                    writer.append("\\n");
+                    break;
+                default:
+                    writer.append(c);
+            }
+        }
+        return writer.toString();
     }
 
 }
