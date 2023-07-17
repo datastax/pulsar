@@ -198,7 +198,7 @@ public class KafkaAbstractSourceTest {
 
     @Test(expectedExceptions = RuntimeException.class, expectedExceptionsMessageRegExp = "Pool exception")
     public final void throwExceptionByPoll() throws Exception {
-        KafkaAbstractSource<String> source = new DummySource();
+        KafkaAbstractSource source = new DummySource();
 
         KafkaSourceConfig kafkaSourceConfig = new KafkaSourceConfig();
         kafkaSourceConfig.setTopic("test-topic");
@@ -206,7 +206,7 @@ public class KafkaAbstractSourceTest {
         kafkaSourceConfigField.setAccessible(true);
         kafkaSourceConfigField.set(source, kafkaSourceConfig);
 
-        Consumer<Object, Object> consumer = mock(Consumer.class);
+        Consumer consumer = mock(Consumer.class);
         Mockito.doThrow(new RuntimeException("Pool exception")).when(consumer)
                 .poll(Mockito.any(Duration.class));
 
