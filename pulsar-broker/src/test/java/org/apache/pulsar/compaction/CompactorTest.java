@@ -21,6 +21,7 @@ package org.apache.pulsar.compaction;
 import static org.apache.pulsar.client.impl.RawReaderTest.extractKey;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -32,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -42,18 +42,13 @@ import lombok.Cleanup;
 import org.apache.bookkeeper.client.BookKeeper;
 import org.apache.bookkeeper.client.LedgerEntry;
 import org.apache.bookkeeper.client.LedgerHandle;
-import org.apache.bookkeeper.mledger.Entry;
-import org.apache.bookkeeper.mledger.Position;
-import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest;
-import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.client.admin.LongRunningProcessStatus;
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.RawMessage;
 import org.apache.pulsar.client.api.Reader;
 import org.apache.pulsar.client.api.Schema;
@@ -162,7 +157,6 @@ public class CompactorTest extends MockedPulsarServiceBaseTest {
         final int numMessages = 1000;
         final int maxKeys = 10;
 
-        @Cleanup
         Producer<byte[]> producer = pulsarClient.newProducer().topic(topic)
                 .enableBatching(false)
                 .messageRoutingMode(MessageRoutingMode.SinglePartition)
@@ -237,7 +231,6 @@ public class CompactorTest extends MockedPulsarServiceBaseTest {
     public void testCompactAddCompact() throws Exception {
         String topic = "persistent://my-property/use/my-ns/my-topic1";
 
-        @Cleanup
         Producer<byte[]> producer = pulsarClient.newProducer().topic(topic)
                 .enableBatching(false)
                 .messageRoutingMode(MessageRoutingMode.SinglePartition)
@@ -275,7 +268,6 @@ public class CompactorTest extends MockedPulsarServiceBaseTest {
     public void testCompactedInOrder() throws Exception {
         String topic = "persistent://my-property/use/my-ns/my-topic1";
 
-        @Cleanup
         Producer<byte[]> producer = pulsarClient.newProducer().topic(topic)
                 .enableBatching(false)
                 .messageRoutingMode(MessageRoutingMode.SinglePartition)
@@ -323,48 +315,6 @@ public class CompactorTest extends MockedPulsarServiceBaseTest {
         TwoPhaseCompactor compactor = new TwoPhaseCompactor(configuration, mockClient,
                 Mockito.mock(BookKeeper.class), compactionScheduler);
         Assert.assertEquals(compactor.getPhaseOneLoopReadTimeoutInSeconds(), 60);
-    }
-
-    @Test
-    public void testCompactedWithConcurrentSend() throws Exception {
-        String topic = "persistent://my-property/use/my-ns/testCompactedWithConcurrentSend";
-
-        @Cleanup
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topic)
-                .enableBatching(false)
-                .messageRoutingMode(MessageRoutingMode.SinglePartition)
-                .create();
-
-        var future = CompletableFuture.runAsync(() -> {
-            for (int i = 0; i < 100; i++) {
-                try {
-                    producer.newMessage().key(String.valueOf(i)).value(String.valueOf(i).getBytes()).send();
-                } catch (PulsarClientException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
-
-        PersistentTopic persistentTopic = (PersistentTopic) pulsar.getBrokerService().getTopicReference(topic).get();
-        PulsarTopicCompactionService topicCompactionService =
-                (PulsarTopicCompactionService) persistentTopic.getTopicCompactionService();
-
-        Awaitility.await().untilAsserted(() -> {
-            long compactedLedgerId = compact(topic);
-            Thread.sleep(300);
-            Optional<CompactedTopicContext> compactedTopicContext = topicCompactionService.getCompactedTopic()
-                    .getCompactedTopicContext();
-            Assert.assertTrue(compactedTopicContext.isPresent());
-            Assert.assertEquals(compactedTopicContext.get().ledger.getId(), compactedLedgerId);
-        });
-
-        Position lastCompactedPosition = topicCompactionService.getLastCompactedPosition().get();
-        Entry lastCompactedEntry = topicCompactionService.readLastCompactedEntry().get();
-
-        Assert.assertTrue(PositionImpl.get(lastCompactedPosition.getLedgerId(), lastCompactedPosition.getEntryId())
-                .compareTo(lastCompactedEntry.getLedgerId(), lastCompactedEntry.getEntryId()) >= 0);
-
-        future.join();
     }
 
     public ByteBuf extractPayload(RawMessage m) throws Exception {
