@@ -1386,7 +1386,7 @@ public class BrokerService implements Closeable {
                 if (isTlsEnabled && StringUtils.isEmpty(data.getServiceUrlTls())) {
                     throw new IllegalArgumentException("serviceUrlTls is empty, brokerClientTlsEnabled: "
                             + isTlsEnabled);
-                } else if (StringUtils.isEmpty(data.getServiceUrl())) {
+                } else if (!isTlsEnabled && StringUtils.isEmpty(data.getServiceUrl())) {
                     throw new IllegalArgumentException("serviceUrl is empty, brokerClientTlsEnabled: " + isTlsEnabled);
                 }
                 String adminApiUrl = isTlsEnabled ? data.getServiceUrlTls() : data.getServiceUrl();
