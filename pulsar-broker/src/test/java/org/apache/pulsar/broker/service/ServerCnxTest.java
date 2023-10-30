@@ -71,6 +71,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import lombok.AllArgsConstructor;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.AddEntryCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.CloseCallback;
@@ -104,6 +105,7 @@ import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.broker.service.utils.ClientChannelHelper;
 import org.apache.pulsar.client.api.ProducerAccessMode;
 import org.apache.pulsar.client.api.transaction.TxnID;
+import org.apache.pulsar.client.util.ConsumerName;
 import org.apache.pulsar.common.api.AuthData;
 import org.apache.pulsar.common.api.proto.AuthMethod;
 import org.apache.pulsar.common.api.proto.BaseCommand;
@@ -1070,6 +1072,98 @@ public class ServerCnxTest {
         channel2.close();
     }
 
+    @Test
+    public void testHandleConsumerAfterClientChannelInactive() throws Exception {
+        final String tName = successTopicName;
+        final long consumerId = 1;
+        final MutableInt requestId = new MutableInt(1);
+        final String sName = successSubName;
+        final String cName1 = ConsumerName.generateRandomName();
+        final String cName2 = ConsumerName.generateRandomName();
+        resetChannel();
+        setChannelConnected();
+
+        // The producer register using the first connection.
+        ByteBuf cmdSubscribe1 = Commands.newSubscribe(tName, sName, consumerId, requestId.incrementAndGet(),
+                SubType.Exclusive, 0, cName1, 0);
+        channel.writeInbound(cmdSubscribe1);
+        assertTrue(getResponse() instanceof CommandSuccess);
+        PersistentTopic topicRef = (PersistentTopic) brokerService.getTopicReference(tName).get();
+        assertNotNull(topicRef);
+        assertNotNull(topicRef.getSubscription(sName).getConsumers());
+        assertEquals(topicRef.getSubscription(sName).getConsumers().size(), 1);
+        assertEquals(topicRef.getSubscription(sName).getConsumers().iterator().next().consumerName(), cName1);
+
+        // Verify the second producer using a new connection will override the consumer who using a stopped channel.
+        channelsStoppedAnswerHealthCheck.add(channel);
+        ClientChannel channel2 = new ClientChannel();
+        setChannelConnected(channel2.serverCnx);
+        ByteBuf cmdSubscribe2 = Commands.newSubscribe(tName, sName, consumerId, requestId.incrementAndGet(),
+                CommandSubscribe.SubType.Exclusive, 0, cName2, 0);
+        channel2.channel.writeInbound(cmdSubscribe2);
+        BackGroundExecutor backGroundExecutor = startBackgroundExecutorForEmbeddedChannel(channel);
+
+        assertTrue(getResponse(channel2.channel, channel2.clientChannelHelper) instanceof CommandSuccess);
+        assertEquals(topicRef.getSubscription(sName).getConsumers().size(), 1);
+        assertEquals(topicRef.getSubscription(sName).getConsumers().iterator().next().consumerName(), cName2);
+        backGroundExecutor.close();
+
+        // cleanup.
+        channel.finish();
+        channel2.close();
+    }
+
+    @Test
+    public void test2ndSubFailedIfDisabledConCheck()
+            throws Exception {
+        final String tName = successTopicName;
+        final long consumerId = 1;
+        final MutableInt requestId = new MutableInt(1);
+        final String sName = successSubName;
+        final String cName1 = ConsumerName.generateRandomName();
+        final String cName2 = ConsumerName.generateRandomName();
+        // Disabled connection check.
+        pulsar.getConfig().setConnectionLivenessCheckTimeoutMillis(-1);
+        resetChannel();
+        setChannelConnected();
+
+        // The consumer register using the first connection.
+        ByteBuf cmdSubscribe1 = Commands.newSubscribe(tName, sName, consumerId, requestId.incrementAndGet(),
+                SubType.Exclusive, 0, cName1, 0);
+        channel.writeInbound(cmdSubscribe1);
+        assertTrue(getResponse() instanceof CommandSuccess);
+        PersistentTopic topicRef = (PersistentTopic) brokerService.getTopicReference(tName).orElse(null);
+        assertNotNull(topicRef);
+        assertNotNull(topicRef.getSubscription(sName).getConsumers());
+        assertEquals(topicRef.getSubscription(sName).getConsumers().stream().map(Consumer::consumerName)
+                .collect(Collectors.toList()), Collections.singletonList(cName1));
+
+        // Verify the consumer using a new connection will override the consumer who using a stopped channel.
+        channelsStoppedAnswerHealthCheck.add(channel);
+        ClientChannel channel2 = new ClientChannel();
+        setChannelConnected(channel2.serverCnx);
+        ByteBuf cmdSubscribe2 = Commands.newSubscribe(tName, sName, consumerId, requestId.incrementAndGet(),
+                CommandSubscribe.SubType.Exclusive, 0, cName2, 0);
+        channel2.channel.writeInbound(cmdSubscribe2);
+        BackGroundExecutor backGroundExecutor = startBackgroundExecutorForEmbeddedChannel(channel);
+
+        // Since the feature "ConnectionLiveness" has been disabled, the fix
+        // by https://github.com/apache/pulsar/pull/21183 will not be affected, so the client will still get an error.
+        Object responseOfConnection2 = getResponse(channel2.channel, channel2.clientChannelHelper);
+        assertTrue(responseOfConnection2 instanceof CommandError);
+        assertTrue(((CommandError) responseOfConnection2).getMessage()
+                .contains("Exclusive consumer is already connected"));
+        assertEquals(topicRef.getSubscription(sName).getConsumers().size(), 1);
+        assertEquals(topicRef.getSubscription(sName).getConsumers().iterator().next().consumerName(), cName1);
+        backGroundExecutor.close();
+
+        // cleanup.
+        channel.finish();
+        channel2.close();
+        // Reset configuration.
+        pulsar.getConfig().setConnectionLivenessCheckTimeoutMillis(5000);
+    }
+
     /**
      * When a channel typed "EmbeddedChannel", once we call channel.execute(runnable), there is no background thread
      * to run it.
@@ -1913,9 +2007,11 @@ public class ServerCnxTest {
                 "test" /* consumer name */, 0 /* avoid reseting cursor */);
         channel.writeInbound(clientCommand);
 
+        BackGroundExecutor backGroundExecutor = startBackgroundExecutorForEmbeddedChannel(channel);
+
         // Create producer second time
         clientCommand = Commands.newSubscribe(successTopicName, //
-                successSubName, 2 /* consumer id */, 1 /* request id */, SubType.Exclusive, 0,
+                successSubName, 2 /* consumer id */, 2 /* request id */, SubType.Exclusive, 0,
                 "test" /* consumer name */, 0 /* avoid reseting cursor */);
         channel.writeInbound(clientCommand);
 
@@ -1925,6 +2021,9 @@ public class ServerCnxTest {
             CommandError error = (CommandError) response;
             assertEquals(error.getError(), ServerError.ConsumerBusy);
         });
+
+        // cleanup.
+        backGroundExecutor.close();
         channel.finish();
     }
 
@@ -2779,13 +2878,7 @@ public class ServerCnxTest {
                     if (channelsStoppedAnswerHealthCheck.contains(channel)) {
                         continue;
                     }
-                    channel.writeAndFlush(Commands.newPong()).addListener(future -> {
-                        if (!future.isSuccess()) {
-                            log.warn("[{}] Forcing connection to close since cannot send a pong message.",
-                                    channel, future.cause());
-                            channel.close();
-                        }
-                    });
+                    channel.writeInbound(Commands.newPong());
                     continue;
                 }
                 return cmd;
