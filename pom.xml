@@ -29,7 +29,7 @@
     <version>29</version>
   </parent>
 
-  <groupId>org.apache.pulsar</groupId>
+  <groupId>com.datastax.oss</groupId>
   <artifactId>pulsar</artifactId>
 
   <version>3.1.1</version>
