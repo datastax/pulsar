@@ -1606,7 +1606,7 @@ flexible messaging model and an intuitive client API.</description>
             <configuration>
               <property>pulsar.basedir</property>
               <project>
-                <groupId>org.apache.pulsar</groupId>
+                <groupId>com.datastax.oss</groupId>
                 <artifactId>pulsar</artifactId>
               </project>
             </configuration>
