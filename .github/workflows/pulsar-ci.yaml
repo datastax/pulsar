@@ -487,18 +487,18 @@ jobs:
           - name: Shade on Java 8
             group: SHADE_RUN
             runtime_jdk: 8
-            setup: sh -x ./build/run_integration_group.sh SHADE_BUILD
+            setup: bash -x ./build/run_integration_group.sh SHADE_BUILD
             no_coverage: true
 
           - name: Shade on Java 11
             group: SHADE_RUN
             runtime_jdk: 11
-            setup: sh -x ./build/run_integration_group.sh SHADE_BUILD
+            setup: bash -x ./build/run_integration_group.sh SHADE_BUILD
             no_coverage: true
 
           - name: Shade on Java 17
             group: SHADE_RUN
-            setup: sh -x ./build/run_integration_group.sh SHADE_BUILD
+            setup: bash -x ./build/run_integration_group.sh SHADE_BUILD
             no_coverage: true
 
           - name: Standalone
