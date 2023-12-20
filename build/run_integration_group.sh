@@ -46,7 +46,7 @@ mvn_list_modules() {
 # 2. runs "mvn -pl [active_modules] -am install [given_params]" to build and install required dependencies
 # 3. finally runs tests with "mvn -pl [active_modules] test [given_params]"
 mvn_run_integration_test() {
-  set +x
+#  set +x
   # skip test run if next parameter is "--build-only"
   local build_only=0
   if [[ "$1" == "--build-only" ]]; then
