@@ -81,6 +81,7 @@ import org.apache.bookkeeper.mledger.impl.PositionImpl;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.commons.lang3.reflect.MethodUtils;
+import org.apache.pulsar.broker.BrokerTestUtil;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.intercept.CounterBrokerInterceptor;
@@ -1790,7 +1791,7 @@ public class TransactionTest extends TransactionTestBase {
 
     @Test
     public void testReadCommittedWithReadCompacted() throws Exception{
-        final String namespace = "tnx/ns-prechecks";
+        final String namespace = BrokerTestUtil.newUniqueName("tnx/ns-prechecks");
         final String topic = "persistent://" + namespace + "/test_transaction_topic";
         admin.namespaces().createNamespace(namespace);
         admin.topics().createNonPartitionedTopic(topic);
@@ -1845,7 +1846,7 @@ public class TransactionTest extends TransactionTestBase {
 
     @Test
     public void testReadCommittedWithCompaction() throws Exception{
-        final String namespace = "tnx/ns-prechecks";
+        final String namespace = BrokerTestUtil.newUniqueName("tnx/ns-prechecks");
         final String topic = "persistent://" + namespace + "/test_transaction_topic" + UUID.randomUUID();
         admin.namespaces().createNamespace(namespace);
         admin.topics().createNonPartitionedTopic(topic);
