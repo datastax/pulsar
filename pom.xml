@@ -102,7 +102,7 @@ flexible messaging model and an intuitive client API.</description>
     <narPluginPhase>package</narPluginPhase>
 
     <!-- apache commons -->
-    <commons-compress.version>1.21</commons-compress.version>
+    <commons-compress.version>1.26.0</commons-compress.version>
 
     <!-- Use Luna Streaming BookKeeper custom version -->
     <bookkeeper.version>4.14.7.1.0.1</bookkeeper.version>
