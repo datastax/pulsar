@@ -31,16 +31,19 @@ import com.google.common.base.Utf8;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
-
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
-import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -94,6 +97,7 @@ import org.apache.pulsar.functions.utils.ComponentTypeUtils;
 import org.apache.pulsar.functions.utils.FunctionCommon;
 import org.apache.pulsar.functions.utils.FunctionConfigUtils;
 import org.apache.pulsar.functions.utils.FunctionMetaDataUtils;
+import org.apache.pulsar.functions.utils.ValidatableFunctionPackage;
 import org.apache.pulsar.functions.utils.functions.FunctionArchive;
 import org.apache.pulsar.functions.utils.io.Connector;
 import org.apache.pulsar.functions.worker.FunctionMetaDataManager;
@@ -104,13 +108,6 @@ import org.apache.pulsar.functions.worker.WorkerService;
 import org.apache.pulsar.functions.worker.WorkerUtils;
 import org.apache.pulsar.functions.worker.service.api.Component;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.URL;
-import java.nio.file.Path;
 
 @Slf4j
 public abstract class ComponentImpl implements Component<PulsarWorkerService> {
@@ -1612,12 +1609,6 @@ public abstract class ComponentImpl implements Component<PulsarWorkerService> {
         }
     }
 
-    protected ClassLoader getClassLoaderFromPackage(String className,
-                                                  File packageFile,
-                                                  String narExtractionDirectory) {
-        return FunctionCommon.getClassLoaderFromPackage(componentType, className, packageFile, narExtractionDirectory);
-    }
-
     static File downloadPackageFile(PulsarWorkerService worker, String packageName)
             throws IOException, PulsarAdminException {
         Path tempDirectory;
@@ -1679,7 +1670,7 @@ public abstract class ComponentImpl implements Component<PulsarWorkerService> {
         }
     }
 
-    protected ClassLoader getBuiltinFunctionClassLoader(String archive) {
+    protected ValidatableFunctionPackage getBuiltinFunctionPackage(String archive) {
         if (!isEmpty(archive)) {
             if (archive.startsWith(org.apache.pulsar.common.functions.Utils.BUILTIN)) {
                 archive = archive.replaceFirst("^builtin://", "");
@@ -1689,7 +1680,7 @@ public abstract class ComponentImpl implements Component<PulsarWorkerService> {
                 if (function == null) {
                     throw new IllegalArgumentException("Built-in " + componentType + " is not available");
                 }
-                return function.getClassLoader();
+                return function.getFunctionPackage();
             }
         }
         return null;

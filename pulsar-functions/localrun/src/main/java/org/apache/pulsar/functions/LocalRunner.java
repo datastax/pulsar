@@ -55,7 +55,9 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.functions.instance.AuthenticationConfig;
 import org.apache.pulsar.common.functions.FunctionConfig;
+import org.apache.pulsar.common.functions.FunctionDefinition;
 import org.apache.pulsar.common.functions.Utils;
+import org.apache.pulsar.common.io.ConnectorDefinition;
 import org.apache.pulsar.common.io.SinkConfig;
 import org.apache.pulsar.common.io.SourceConfig;
 import org.apache.pulsar.common.nar.FileUtils;
@@ -77,8 +79,11 @@ import org.apache.pulsar.functions.secretsproviderconfigurator.NameAndConfigBase
 import org.apache.pulsar.functions.secretsproviderconfigurator.SecretsProviderConfigurator;
 import org.apache.pulsar.functions.utils.FunctionCommon;
 import org.apache.pulsar.functions.utils.FunctionConfigUtils;
+import org.apache.pulsar.functions.utils.FunctionRuntimeCommon;
+import org.apache.pulsar.functions.utils.LoadedFunctionPackage;
 import org.apache.pulsar.functions.utils.SinkConfigUtils;
 import org.apache.pulsar.functions.utils.SourceConfigUtils;
+import org.apache.pulsar.functions.utils.ValidatableFunctionPackage;
 import org.apache.pulsar.functions.utils.functioncache.FunctionCacheEntry;
 import org.apache.pulsar.functions.utils.functions.FunctionArchive;
 import org.apache.pulsar.functions.utils.functions.FunctionUtils;
@@ -344,9 +349,12 @@ public class LocalRunner implements AutoCloseable {
                     userCodeFile = functionConfig.getJar();
                     userCodeClassLoader = extractClassLoader(
                         userCodeFile, ComponentType.FUNCTION, functionConfig.getClassName());
+                    ValidatableFunctionPackage validatableFunctionPackage =
+                            new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(),
+                                    FunctionDefinition.class);
                     functionDetails = FunctionConfigUtils.convert(
                         functionConfig,
-                        FunctionConfigUtils.validateJavaFunction(functionConfig, getCurrentOrUserCodeClassLoader()));
+                        FunctionConfigUtils.validateJavaFunction(functionConfig, validatableFunctionPackage));
                 } else if (functionConfig.getRuntime() == FunctionConfig.Runtime.GO) {
                     userCodeFile = functionConfig.getGo();
                 } else if (functionConfig.getRuntime() == FunctionConfig.Runtime.PYTHON) {
@@ -356,7 +364,10 @@ public class LocalRunner implements AutoCloseable {
                 }
 
                 if (functionDetails == null) {
-                    functionDetails = FunctionConfigUtils.convert(functionConfig, getCurrentOrUserCodeClassLoader());
+                    ValidatableFunctionPackage validatableFunctionPackage =
+                            new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(),
+                                    FunctionDefinition.class);
+                    functionDetails = FunctionConfigUtils.convert(functionConfig, validatableFunctionPackage);
                 }
             } else if (sourceConfig != null) {
                 inferMissingArguments(sourceConfig);
@@ -364,9 +375,10 @@ public class LocalRunner implements AutoCloseable {
                 parallelism = sourceConfig.getParallelism();
                 userCodeClassLoader = extractClassLoader(
                     userCodeFile, ComponentType.SOURCE, sourceConfig.getClassName());
-                functionDetails = SourceConfigUtils.convert(
-                    sourceConfig,
-                    SourceConfigUtils.validateAndExtractDetails(sourceConfig, getCurrentOrUserCodeClassLoader(), true));
+                ValidatableFunctionPackage validatableFunctionPackage =
+                        new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(), ConnectorDefinition.class);
+                functionDetails = SourceConfigUtils.convert(sourceConfig,
+                        SourceConfigUtils.validateAndExtractDetails(sourceConfig, validatableFunctionPackage, true));
             } else if (sinkConfig != null) {
                 inferMissingArguments(sinkConfig);
                 userCodeFile = sinkConfig.getArchive();
@@ -374,6 +386,8 @@ public class LocalRunner implements AutoCloseable {
                 parallelism = sinkConfig.getParallelism();
                 userCodeClassLoader = extractClassLoader(
                     userCodeFile, ComponentType.SINK, sinkConfig.getClassName());
+                ValidatableFunctionPackage validatableFunctionPackage =
+                        new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(), ConnectorDefinition.class);
                 if (isNotEmpty(sinkConfig.getTransformFunction())) {
                     transformFunctionCodeClassLoader = extractClassLoader(
                         sinkConfig.getTransformFunction(),
@@ -382,16 +396,19 @@ public class LocalRunner implements AutoCloseable {
                 }
 
                 ClassLoader functionClassLoader = null;
+                ValidatableFunctionPackage validatableTransformFunction = null;
                 if (transformFunctionCodeClassLoader != null) {
                     functionClassLoader = transformFunctionCodeClassLoader.getClassLoader() == null
                         ? Thread.currentThread().getContextClassLoader()
                         : transformFunctionCodeClassLoader.getClassLoader();
+                    validatableTransformFunction =
+                            new LoadedFunctionPackage(functionClassLoader, FunctionDefinition.class);
                 }
 
                 functionDetails = SinkConfigUtils.convert(
                     sinkConfig,
-                    SinkConfigUtils.validateAndExtractDetails(sinkConfig, getCurrentOrUserCodeClassLoader(),
-                        functionClassLoader, true));
+                    SinkConfigUtils.validateAndExtractDetails(sinkConfig, validatableFunctionPackage,
+                        validatableTransformFunction, true));
             } else {
                 throw new IllegalArgumentException("Must specify Function, Source or Sink config");
             }
@@ -458,7 +475,7 @@ public class LocalRunner implements AutoCloseable {
         if (classLoader == null) {
             if (userCodeFile != null && Utils.isFunctionPackageUrlSupported(userCodeFile)) {
                 File file = FunctionCommon.extractFileFromPkgURL(userCodeFile);
-                classLoader = FunctionCommon.getClassLoaderFromPackage(
+                classLoader = FunctionRuntimeCommon.getClassLoaderFromPackage(
                         componentType, className, file, narExtractionDirectory);
                 classLoaderCreated = true;
             } else if (userCodeFile != null) {
@@ -480,7 +497,7 @@ public class LocalRunner implements AutoCloseable {
                     }
                     throw new RuntimeException(errorMsg + " (" + userCodeFile + ") does not exist");
                 }
-                classLoader = FunctionCommon.getClassLoaderFromPackage(
+                classLoader = FunctionRuntimeCommon.getClassLoaderFromPackage(
                         componentType, className, file, narExtractionDirectory);
                 classLoaderCreated = true;
             } else {
@@ -696,7 +713,7 @@ public class LocalRunner implements AutoCloseable {
         FunctionArchive function = functions.get(functionName);
         if (function != null && function.getFunctionDefinition().getFunctionClass() != null) {
             // Function type is a valid built-in type.
-            return function.getClassLoader();
+            return function.getFunctionPackage().getClassLoader();
         } else {
             return null;
         }
@@ -710,7 +727,7 @@ public class LocalRunner implements AutoCloseable {
         Connector connector = connectors.get(source);
         if (connector != null && connector.getConnectorDefinition().getSourceClass() != null) {
             // Source type is a valid built-in connector type.
-            return connector.getClassLoader();
+            return connector.getConnectorFunctionPackage().getClassLoader();
         } else {
             return null;
         }
@@ -724,18 +741,18 @@ public class LocalRunner implements AutoCloseable {
         Connector connector = connectors.get(sink);
         if (connector != null && connector.getConnectorDefinition().getSinkClass() != null) {
             // Sink type is a valid built-in connector type
-            return connector.getClassLoader();
+            return connector.getConnectorFunctionPackage().getClassLoader();
         } else {
             return null;
         }
     }
 
     private TreeMap<String, FunctionArchive> getFunctions() throws IOException {
-        return FunctionUtils.searchForFunctions(functionsDir);
+        return FunctionUtils.searchForFunctions(functionsDir, narExtractionDirectory, true);
     }
 
     private TreeMap<String, Connector> getConnectors() throws IOException {
-        return ConnectorUtils.searchForConnectors(connectorsDir, narExtractionDirectory);
+        return ConnectorUtils.searchForConnectors(connectorsDir, narExtractionDirectory, true);
     }
 
     private SecretsProviderConfigurator getSecretsProviderConfigurator() {

@@ -55,6 +55,7 @@ import org.apache.pulsar.functions.runtime.RuntimeSpawner;
 import org.apache.pulsar.functions.utils.Actions;
 import org.apache.pulsar.functions.utils.FunctionCommon;
 import org.apache.pulsar.functions.utils.SourceConfigUtils;
+import org.apache.pulsar.functions.utils.ValidatableFunctionPackage;
 import org.apache.pulsar.functions.utils.io.Connector;
 
 import java.io.File;
@@ -522,7 +523,7 @@ public class FunctionActioner {
                 builder.setClassName(sourceClass);
                 functionDetails.setSource(builder);
 
-                fillSourceTypeClass(functionDetails, connector.getClassLoader(), sourceClass);
+                fillSourceTypeClass(functionDetails, connector.getConnectorFunctionPackage(), sourceClass);
                 return archive;
             }
         }
@@ -538,7 +539,7 @@ public class FunctionActioner {
                 builder.setClassName(sinkClass);
                 functionDetails.setSink(builder);
 
-                fillSinkTypeClass(functionDetails, connector.getClassLoader(), sinkClass);
+                fillSinkTypeClass(functionDetails, connector.getConnectorFunctionPackage(), sinkClass);
                 return archive;
             }
         }
@@ -552,8 +553,8 @@ public class FunctionActioner {
     }
 
     private void fillSourceTypeClass(FunctionDetails.Builder functionDetails,
-                                     ClassLoader narClassLoader, String className) throws ClassNotFoundException {
-        String typeArg = getSourceType(className, narClassLoader).getName();
+                                     ValidatableFunctionPackage functionPackage, String className) {
+        String typeArg = getSourceType(className, functionPackage.getTypePool()).asErasure().getName();
 
         SourceSpec.Builder sourceBuilder = SourceSpec.newBuilder(functionDetails.getSource());
         sourceBuilder.setTypeClassName(typeArg);
@@ -568,8 +569,8 @@ public class FunctionActioner {
     }
 
     private void fillSinkTypeClass(FunctionDetails.Builder functionDetails,
-                                   ClassLoader narClassLoader, String className) throws ClassNotFoundException {
-        String typeArg = getSinkType(className, narClassLoader).getName();
+                                   ValidatableFunctionPackage functionPackage, String className) {
+        String typeArg = getSinkType(className, functionPackage.getTypePool()).asErasure().getName();
 
         SinkSpec.Builder sinkBuilder = SinkSpec.newBuilder(functionDetails.getSink());
         sinkBuilder.setTypeClassName(typeArg);
