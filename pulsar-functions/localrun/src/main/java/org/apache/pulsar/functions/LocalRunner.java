@@ -20,13 +20,13 @@ package org.apache.pulsar.functions;
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.pulsar.common.functions.Utils.inferMissingArguments;
-
 import com.beust.jcommander.IStringConverter;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParser;
+import io.prometheus.client.exporter.HTTPServer;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -34,7 +34,6 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -48,19 +47,19 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import io.prometheus.client.exporter.HTTPServer;
 import lombok.Builder;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pulsar.functions.instance.AuthenticationConfig;
 import org.apache.pulsar.common.functions.FunctionConfig;
+import org.apache.pulsar.common.functions.FunctionDefinition;
 import org.apache.pulsar.common.functions.Utils;
+import org.apache.pulsar.common.io.ConnectorDefinition;
 import org.apache.pulsar.common.io.SinkConfig;
 import org.apache.pulsar.common.io.SourceConfig;
 import org.apache.pulsar.common.nar.FileUtils;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.apache.pulsar.common.util.Reflections;
+import org.apache.pulsar.functions.instance.AuthenticationConfig;
 import org.apache.pulsar.functions.instance.InstanceConfig;
 import org.apache.pulsar.functions.instance.stats.FunctionCollectorRegistry;
 import org.apache.pulsar.functions.proto.Function;
@@ -77,8 +76,11 @@ import org.apache.pulsar.functions.secretsproviderconfigurator.NameAndConfigBase
 import org.apache.pulsar.functions.secretsproviderconfigurator.SecretsProviderConfigurator;
 import org.apache.pulsar.functions.utils.FunctionCommon;
 import org.apache.pulsar.functions.utils.FunctionConfigUtils;
+import org.apache.pulsar.functions.utils.FunctionRuntimeCommon;
+import org.apache.pulsar.functions.utils.LoadedFunctionPackage;
 import org.apache.pulsar.functions.utils.SinkConfigUtils;
 import org.apache.pulsar.functions.utils.SourceConfigUtils;
+import org.apache.pulsar.functions.utils.ValidatableFunctionPackage;
 import org.apache.pulsar.functions.utils.functioncache.FunctionCacheEntry;
 import org.apache.pulsar.functions.utils.functions.FunctionArchive;
 import org.apache.pulsar.functions.utils.functions.FunctionUtils;
@@ -97,7 +99,6 @@ public class LocalRunner implements AutoCloseable {
     private final Thread shutdownHook;
     private final int instanceLivenessCheck;
     private UserCodeClassLoader userCodeClassLoader;
-    private UserCodeClassLoader transformFunctionCodeClassLoader;
     private RuntimeFactory runtimeFactory;
     private HTTPServer metricsServer;
 
@@ -152,43 +153,56 @@ public class LocalRunner implements AutoCloseable {
         }
     }
 
-    @Parameter(names = "--functionConfig", description = "The json representation of FunctionConfig", hidden = true, converter = FunctionConfigConverter.class)
+    @Parameter(names = "--functionConfig", description = "The json representation of FunctionConfig",
+            hidden = true, converter = FunctionConfigConverter.class)
     protected FunctionConfig functionConfig;
-    @Parameter(names = "--sourceConfig", description = "The json representation of SourceConfig", hidden = true, converter = SourceConfigConverter.class)
+    @Parameter(names = "--sourceConfig", description = "The json representation of SourceConfig",
+            hidden = true, converter = SourceConfigConverter.class)
     protected SourceConfig sourceConfig;
-    @Parameter(names = "--sinkConfig", description = "The json representation of SinkConfig", hidden = true, converter = SinkConfigConverter.class)
+    @Parameter(names = "--sinkConfig", description = "The json representation of SinkConfig",
+            hidden = true, converter = SinkConfigConverter.class)
     protected SinkConfig sinkConfig;
-    @Parameter(names = "--stateStorageImplClass", description = "The implemenatation class state storage service (by default Apache BookKeeper)", hidden = true, required = false)
+    @Parameter(names = "--stateStorageImplClass", description = "The implemenatation class "
+            + "state storage service (by default Apache BookKeeper)", hidden = true, required = false)
     protected String stateStorageImplClass;
-    @Parameter(names = "--stateStorageServiceUrl", description = "The URL for the state storage service (by default Apache BookKeeper)", hidden = true)
+    @Parameter(names = "--stateStorageServiceUrl", description = "The URL for the state storage service "
+            + "(by default Apache BookKeeper)", hidden = true)
     protected String stateStorageServiceUrl;
     @Parameter(names = "--brokerServiceUrl", description = "The URL for the Pulsar broker", hidden = true)
     protected String brokerServiceUrl;
     @Parameter(names = "--webServiceUrl", description = "The URL for the Pulsar web service", hidden = true)
     protected String webServiceUrl = null;
-    @Parameter(names = "--clientAuthPlugin", description = "Client authentication plugin using which function-process can connect to broker", hidden = true)
+    @Parameter(names = "--clientAuthPlugin", description = "Client authentication plugin using which "
+            + "function-process can connect to broker", hidden = true)
     protected String clientAuthPlugin;
     @Parameter(names = "--clientAuthParams", description = "Client authentication param", hidden = true)
     protected String clientAuthParams;
     @Parameter(names = "--useTls", description = "Use tls connection\n", hidden = true, arity = 1)
     protected boolean useTls;
-    @Parameter(names = "--tlsAllowInsecureConnection", description = "Allow insecure tls connection\n", hidden = true, arity = 1)
+    @Parameter(names = "--tlsAllowInsecureConnection", description = "Allow insecure tls connection\n",
+            hidden = true, arity = 1)
     protected boolean tlsAllowInsecureConnection;
-    @Parameter(names = "--tlsHostNameVerificationEnabled", description = "Enable hostname verification", hidden = true, arity = 1)
+    @Parameter(names = "--tlsHostNameVerificationEnabled", description = "Enable hostname verification", hidden = true
+            , arity = 1)
     protected boolean tlsHostNameVerificationEnabled;
     @Parameter(names = "--tlsTrustCertFilePath", description = "tls trust cert file path", hidden = true)
     protected String tlsTrustCertFilePath;
     @Parameter(names = "--instanceIdOffset", description = "Start the instanceIds from this offset", hidden = true)
     protected int instanceIdOffset = 0;
-    @Parameter(names = "--runtime", description = "Function runtime to use (Thread/Process)", hidden = true, converter = RuntimeConverter.class)
+    @Parameter(names = "--runtime", description = "Function runtime to use (Thread/Process)", hidden = true,
+            converter = RuntimeConverter.class)
     protected RuntimeEnv runtimeEnv;
-    @Parameter(names = "--secretsProviderClassName", description = "Whats the classname of secrets provider", hidden = true)
+    @Parameter(names = "--secretsProviderClassName",
+            description = "Whats the classname of secrets provider", hidden = true)
     protected String secretsProviderClassName;
-    @Parameter(names = "--secretsProviderConfig", description = "Whats the config for the secrets provider", hidden = true)
+    @Parameter(names = "--secretsProviderConfig",
+            description = "Whats the config for the secrets provider", hidden = true)
     protected String secretsProviderConfig;
-    @Parameter(names = "--metricsPortStart", description = "The starting port range for metrics server. When running instances as threads, one metrics server is used to host the stats for all instances.", hidden = true)
+    @Parameter(names = "--metricsPortStart", description = "The starting port range for metrics server. When running "
+            + "instances as threads, one metrics server is used to host the stats for all instances.", hidden = true)
     protected Integer metricsPortStart;
-    @Parameter(names = "--exitOnError", description = "The starting port range for metrics server. When running instances as threads, one metrics server is used to host the stats for all instances.", hidden = true)
+    @Parameter(names = "--exitOnError", description = "The starting port range for metrics server. When running "
+            + "instances as threads, one metrics server is used to host the stats for all instances.", hidden = true)
     protected boolean exitOnError;
 
     private static final String DEFAULT_SERVICE_URL = "pulsar://localhost:6650";
@@ -256,11 +270,13 @@ public class LocalRunner implements AutoCloseable {
     }
 
     private static String getPulsarDirectory(String directory) {
-        String pulsarHome = System.getenv("PULSAR_HOME");
-        if (pulsarHome == null) {
-            pulsarHome = Paths.get("").toAbsolutePath().toString();
+        final File directoryPath;
+        if (System.getenv("PULSAR_HOME") != null) {
+            directoryPath = new File(System.getenv("PULSAR_HOME"), directory);
+        } else {
+            directoryPath = new File(directory);
         }
-        return Paths.get(pulsarHome, directory).toString();
+        return directoryPath.getAbsolutePath();
     }
 
     private static File createNarExtractionTempDirectory() {
@@ -309,8 +325,6 @@ public class LocalRunner implements AutoCloseable {
 
             closeClassLoaderIfneeded(userCodeClassLoader);
             userCodeClassLoader = null;
-            closeClassLoaderIfneeded(transformFunctionCodeClassLoader);
-            transformFunctionCodeClassLoader = null;
         }
     }
 
@@ -344,9 +358,12 @@ public class LocalRunner implements AutoCloseable {
                     userCodeFile = functionConfig.getJar();
                     userCodeClassLoader = extractClassLoader(
                         userCodeFile, ComponentType.FUNCTION, functionConfig.getClassName());
+                    ValidatableFunctionPackage validatableFunctionPackage =
+                            new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(),
+                                    FunctionDefinition.class);
                     functionDetails = FunctionConfigUtils.convert(
                         functionConfig,
-                        FunctionConfigUtils.validateJavaFunction(functionConfig, getCurrentOrUserCodeClassLoader()));
+                        FunctionConfigUtils.validateJavaFunction(functionConfig, validatableFunctionPackage));
                 } else if (functionConfig.getRuntime() == FunctionConfig.Runtime.GO) {
                     userCodeFile = functionConfig.getGo();
                 } else if (functionConfig.getRuntime() == FunctionConfig.Runtime.PYTHON) {
@@ -356,7 +373,10 @@ public class LocalRunner implements AutoCloseable {
                 }
 
                 if (functionDetails == null) {
-                    functionDetails = FunctionConfigUtils.convert(functionConfig, getCurrentOrUserCodeClassLoader());
+                    ValidatableFunctionPackage validatableFunctionPackage =
+                            new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(),
+                                    FunctionDefinition.class);
+                    functionDetails = FunctionConfigUtils.convert(functionConfig, validatableFunctionPackage);
                 }
             } else if (sourceConfig != null) {
                 inferMissingArguments(sourceConfig);
@@ -364,9 +384,10 @@ public class LocalRunner implements AutoCloseable {
                 parallelism = sourceConfig.getParallelism();
                 userCodeClassLoader = extractClassLoader(
                     userCodeFile, ComponentType.SOURCE, sourceConfig.getClassName());
-                functionDetails = SourceConfigUtils.convert(
-                    sourceConfig,
-                    SourceConfigUtils.validateAndExtractDetails(sourceConfig, getCurrentOrUserCodeClassLoader(), true));
+                ValidatableFunctionPackage validatableFunctionPackage =
+                        new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(), ConnectorDefinition.class);
+                functionDetails = SourceConfigUtils.convert(sourceConfig,
+                        SourceConfigUtils.validateAndExtractDetails(sourceConfig, validatableFunctionPackage, true));
             } else if (sinkConfig != null) {
                 inferMissingArguments(sinkConfig);
                 userCodeFile = sinkConfig.getArchive();
@@ -374,24 +395,13 @@ public class LocalRunner implements AutoCloseable {
                 parallelism = sinkConfig.getParallelism();
                 userCodeClassLoader = extractClassLoader(
                     userCodeFile, ComponentType.SINK, sinkConfig.getClassName());
-                if (isNotEmpty(sinkConfig.getTransformFunction())) {
-                    transformFunctionCodeClassLoader = extractClassLoader(
-                        sinkConfig.getTransformFunction(),
-                        ComponentType.FUNCTION,
-                        sinkConfig.getTransformFunctionClassName());
-                }
-
-                ClassLoader functionClassLoader = null;
-                if (transformFunctionCodeClassLoader != null) {
-                    functionClassLoader = transformFunctionCodeClassLoader.getClassLoader() == null
-                        ? Thread.currentThread().getContextClassLoader()
-                        : transformFunctionCodeClassLoader.getClassLoader();
-                }
+                ValidatableFunctionPackage validatableFunctionPackage =
+                        new LoadedFunctionPackage(getCurrentOrUserCodeClassLoader(), ConnectorDefinition.class);
 
                 functionDetails = SinkConfigUtils.convert(
                     sinkConfig,
-                    SinkConfigUtils.validateAndExtractDetails(sinkConfig, getCurrentOrUserCodeClassLoader(),
-                        functionClassLoader, true));
+                    SinkConfigUtils.validateAndExtractDetails(sinkConfig, validatableFunctionPackage,
+                            true));
             } else {
                 throw new IllegalArgumentException("Must specify Function, Source or Sink config");
             }
@@ -416,7 +426,8 @@ public class LocalRunner implements AutoCloseable {
                 webServiceUrl = DEFAULT_WEB_SERVICE_URL;
             }
 
-            if ((sourceConfig != null || sinkConfig != null || functionConfig.getRuntime() == FunctionConfig.Runtime.JAVA)
+            if ((sourceConfig != null || sinkConfig != null
+                    || functionConfig.getRuntime() == FunctionConfig.Runtime.JAVA)
                     && (runtimeEnv == null || runtimeEnv == RuntimeEnv.THREAD)) {
                 // By default run java functions as threads
                 startThreadedMode(functionDetails, parallelism, instanceIdOffset, serviceUrl,
@@ -435,7 +446,7 @@ public class LocalRunner implements AutoCloseable {
                     log.info("RuntimeSpawner quit because of", spawner.getRuntime().getDeathException());
                 }
                 close();
-            } else  {
+            } else {
                 synchronized (this) {
                     while (running.get()) {
                         this.wait();
@@ -458,7 +469,7 @@ public class LocalRunner implements AutoCloseable {
         if (classLoader == null) {
             if (userCodeFile != null && Utils.isFunctionPackageUrlSupported(userCodeFile)) {
                 File file = FunctionCommon.extractFileFromPkgURL(userCodeFile);
-                classLoader = FunctionCommon.getClassLoaderFromPackage(
+                classLoader = FunctionRuntimeCommon.getClassLoaderFromPackage(
                         componentType, className, file, narExtractionDirectory);
                 classLoaderCreated = true;
             } else if (userCodeFile != null) {
@@ -480,7 +491,7 @@ public class LocalRunner implements AutoCloseable {
                     }
                     throw new RuntimeException(errorMsg + " (" + userCodeFile + ") does not exist");
                 }
-                classLoader = FunctionCommon.getClassLoaderFromPackage(
+                classLoader = FunctionRuntimeCommon.getClassLoaderFromPackage(
                         componentType, className, file, narExtractionDirectory);
                 classLoaderCreated = true;
             } else {
@@ -547,7 +558,8 @@ public class LocalRunner implements AutoCloseable {
             if (functionConfig != null) {
                 instanceConfig.setMaxPendingAsyncRequests(functionConfig.getMaxPendingAsyncRequests());
                 if (functionConfig.getExposePulsarAdminClientEnabled() != null) {
-                    instanceConfig.setExposePulsarAdminClientEnabled(functionConfig.getExposePulsarAdminClientEnabled());
+                    instanceConfig
+                            .setExposePulsarAdminClientEnabled(functionConfig.getExposePulsarAdminClientEnabled());
                 }
             }
 
@@ -601,10 +613,11 @@ public class LocalRunner implements AutoCloseable {
 
         SecretsProvider secretsProvider;
         if (secretsProviderClassName != null) {
-            secretsProvider = (SecretsProvider) Reflections.createInstance(secretsProviderClassName, ClassLoader.getSystemClassLoader());
+            secretsProvider = (SecretsProvider) Reflections
+                    .createInstance(secretsProviderClassName, ClassLoader.getSystemClassLoader());
             Map<String, String> config = null;
             if (secretsProviderConfig != null) {
-                config = (Map<String, String>)new Gson().fromJson(secretsProviderConfig, Map.class);
+                config = (Map<String, String>) new Gson().fromJson(secretsProviderConfig, Map.class);
             }
             secretsProvider.init(config);
         } else {
@@ -652,7 +665,8 @@ public class LocalRunner implements AutoCloseable {
             if (functionConfig != null) {
                 instanceConfig.setMaxPendingAsyncRequests(functionConfig.getMaxPendingAsyncRequests());
                 if (functionConfig.getExposePulsarAdminClientEnabled() != null) {
-                    instanceConfig.setExposePulsarAdminClientEnabled(functionConfig.getExposePulsarAdminClientEnabled());
+                    instanceConfig
+                            .setExposePulsarAdminClientEnabled(functionConfig.getExposePulsarAdminClientEnabled());
                 }
             }
 
@@ -696,7 +710,7 @@ public class LocalRunner implements AutoCloseable {
         FunctionArchive function = functions.get(functionName);
         if (function != null && function.getFunctionDefinition().getFunctionClass() != null) {
             // Function type is a valid built-in type.
-            return function.getClassLoader();
+            return function.getFunctionPackage().getClassLoader();
         } else {
             return null;
         }
@@ -710,7 +724,7 @@ public class LocalRunner implements AutoCloseable {
         Connector connector = connectors.get(source);
         if (connector != null && connector.getConnectorDefinition().getSourceClass() != null) {
             // Source type is a valid built-in connector type.
-            return connector.getClassLoader();
+            return connector.getConnectorFunctionPackage().getClassLoader();
         } else {
             return null;
         }
@@ -724,18 +738,18 @@ public class LocalRunner implements AutoCloseable {
         Connector connector = connectors.get(sink);
         if (connector != null && connector.getConnectorDefinition().getSinkClass() != null) {
             // Sink type is a valid built-in connector type
-            return connector.getClassLoader();
+            return connector.getConnectorFunctionPackage().getClassLoader();
         } else {
             return null;
         }
     }
 
     private TreeMap<String, FunctionArchive> getFunctions() throws IOException {
-        return FunctionUtils.searchForFunctions(functionsDir);
+        return FunctionUtils.searchForFunctions(functionsDir, narExtractionDirectory, true);
     }
 
     private TreeMap<String, Connector> getConnectors() throws IOException {
-        return ConnectorUtils.searchForConnectors(connectorsDir, narExtractionDirectory);
+        return ConnectorUtils.searchForConnectors(connectorsDir, narExtractionDirectory, true);
     }
 
     private SecretsProviderConfigurator getSecretsProviderConfigurator() {
@@ -743,9 +757,10 @@ public class LocalRunner implements AutoCloseable {
         if (secretsProviderClassName != null) {
             Map<String, String> config = null;
             if (secretsProviderConfig != null) {
-                config = (Map<String, String>)new Gson().fromJson(secretsProviderConfig, Map.class);
+                config = (Map<String, String>) new Gson().fromJson(secretsProviderConfig, Map.class);
             }
-            secretsProviderConfigurator = new NameAndConfigBasedSecretsProviderConfigurator(secretsProviderClassName, config);
+            secretsProviderConfigurator =
+                    new NameAndConfigBasedSecretsProviderConfigurator(secretsProviderClassName, config);
         } else {
             secretsProviderConfigurator = new DefaultSecretsProviderConfigurator();
         }

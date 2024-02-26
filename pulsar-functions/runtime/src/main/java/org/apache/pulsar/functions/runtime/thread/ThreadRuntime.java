@@ -26,7 +26,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.broker.PulsarServerException;
@@ -36,6 +35,7 @@ import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.common.nar.FileUtils;
 import org.apache.pulsar.functions.instance.InstanceConfig;
 import org.apache.pulsar.functions.instance.InstanceUtils;
+import org.apache.pulsar.functions.instance.JavaInstanceRunnable;
 import org.apache.pulsar.functions.instance.stats.FunctionCollectorRegistry;
 import org.apache.pulsar.functions.proto.Function;
 import org.apache.pulsar.functions.proto.InstanceCommunication;
@@ -44,7 +44,6 @@ import org.apache.pulsar.functions.runtime.Runtime;
 import org.apache.pulsar.functions.secretsprovider.SecretsProvider;
 import org.apache.pulsar.functions.utils.FunctionCommon;
 import org.apache.pulsar.functions.utils.functioncache.FunctionCacheManager;
-import org.apache.pulsar.functions.instance.JavaInstanceRunnable;
 import org.apache.pulsar.functions.worker.ConnectorsManager;
 import org.apache.pulsar.functions.worker.FunctionsManager;
 
@@ -119,24 +118,24 @@ public class ThreadRuntime implements Runtime {
                                                       String narExtractionDirectory,
                                                       FunctionCacheManager fnCache,
                                                       Optional<ConnectorsManager> connectorsManager,
-                                                      Optional<FunctionsManager> functionsManager,
-                                                      Function.FunctionDetails.ComponentType componentType)
-            throws Exception {
-        if (FunctionCommon.isFunctionCodeBuiltin(instanceConfig.getFunctionDetails(), componentType)) {
+                                                      Optional<FunctionsManager> functionsManager) throws Exception {
+        if (FunctionCommon.isFunctionCodeBuiltin(instanceConfig.getFunctionDetails())) {
+            Function.FunctionDetails.ComponentType componentType =
+                    InstanceUtils.calculateSubjectType(instanceConfig.getFunctionDetails());
             if (componentType == Function.FunctionDetails.ComponentType.FUNCTION && functionsManager.isPresent()) {
                 return functionsManager.get()
                         .getFunction(instanceConfig.getFunctionDetails().getBuiltin())
-                        .getClassLoader();
+                        .getFunctionPackage().getClassLoader();
             }
             if (componentType == Function.FunctionDetails.ComponentType.SOURCE && connectorsManager.isPresent()) {
                 return connectorsManager.get()
                         .getConnector(instanceConfig.getFunctionDetails().getSource().getBuiltin())
-                        .getClassLoader();
+                        .getConnectorFunctionPackage().getClassLoader();
             }
             if (componentType == Function.FunctionDetails.ComponentType.SINK && connectorsManager.isPresent()) {
                 return connectorsManager.get()
                         .getConnector(instanceConfig.getFunctionDetails().getSink().getBuiltin())
-                        .getClassLoader();
+                        .getConnectorFunctionPackage().getClassLoader();
             }
         }
         return loadJars(jarFile, instanceConfig, functionId, instanceConfig.getFunctionDetails().getName(),
@@ -179,9 +178,8 @@ public class ThreadRuntime implements Runtime {
                     Collections.emptyList());
         }
 
-        log.info(
-                "Initialize function class loader for function {} at function cache manager, functionClassLoader: {}",
-                functionName, fnCache.getClassLoader(functionId));
+        log.info("Initialize function class loader for function {} at function cache manager, functionClassLoader: {}",
+                functionName, fnCache.getClassLoader(instanceConfig.getFunctionId()));
 
         fnClassLoader = fnCache.getClassLoader(functionId);
         if (null == fnClassLoader) {
@@ -199,13 +197,12 @@ public class ThreadRuntime implements Runtime {
 
         // extract class loader for function
         ClassLoader functionClassLoader =
-                getFunctionClassLoader(instanceConfig, instanceConfig.getFunctionId(), jarFile, narExtractionDirectory,
-                        fnCache, connectorsManager, functionsManager,
-                        InstanceUtils.calculateSubjectType(instanceConfig.getFunctionDetails()));
+                getFunctionClassLoader(instanceConfig, instanceConfig.getFunctionId(), jarFile, narExtractionDirectory, fnCache, connectorsManager,
+                        functionsManager);
 
         ClassLoader transformFunctionClassLoader = transformFunctionFile == null ? null : getFunctionClassLoader(
                 instanceConfig, instanceConfig.getTransformFunctionId(), transformFunctionFile, narExtractionDirectory,
-                fnCache, connectorsManager, functionsManager, Function.FunctionDetails.ComponentType.FUNCTION);
+                fnCache, connectorsManager, functionsManager);
 
         // re-initialize JavaInstanceRunnable so that variables in constructor can be re-initialized
         this.javaInstanceRunnable = new JavaInstanceRunnable(
@@ -254,7 +251,9 @@ public class ThreadRuntime implements Runtime {
                 // kill the thread
                 fnThread.join(THREAD_SHUTDOWN_TIMEOUT_MILLIS, 0);
                 if (fnThread.isAlive()) {
-                    log.warn("The function instance thread is still alive after {} milliseconds. Giving up waiting and moving forward to close function.", THREAD_SHUTDOWN_TIMEOUT_MILLIS);
+                    log.warn("The function instance thread is still alive after {} milliseconds. "
+                            + "Giving up waiting and moving forward to close function.",
+                            THREAD_SHUTDOWN_TIMEOUT_MILLIS);
                 }
             } catch (InterruptedException e) {
                 // ignore this
