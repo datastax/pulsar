@@ -30,7 +30,22 @@ import static org.apache.pulsar.functions.utils.FunctionCommon.getSourceType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.io.MoreFiles;
 import com.google.common.io.RecursiveDeleteOption;
-
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -58,24 +73,6 @@ import org.apache.pulsar.functions.utils.SourceConfigUtils;
 import org.apache.pulsar.functions.utils.ValidatableFunctionPackage;
 import org.apache.pulsar.functions.utils.io.Connector;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
 @Data
 @Slf4j
 public class FunctionActioner {
@@ -86,17 +83,21 @@ public class FunctionActioner {
     private final ConnectorsManager connectorsManager;
     private final FunctionsManager functionsManager;
     private final PulsarAdmin pulsarAdmin;
+    private final PackageUrlValidator packageUrlValidator;
 
     public FunctionActioner(WorkerConfig workerConfig,
                             RuntimeFactory runtimeFactory,
                             Namespace dlogNamespace,
-                            ConnectorsManager connectorsManager,FunctionsManager functionsManager,PulsarAdmin pulsarAdmin) {
+                            ConnectorsManager connectorsManager,
+                            FunctionsManager functionsManager, PulsarAdmin pulsarAdmin,
+                            PackageUrlValidator packageUrlValidator) {
         this.workerConfig = workerConfig;
         this.runtimeFactory = runtimeFactory;
         this.dlogNamespace = dlogNamespace;
         this.connectorsManager = connectorsManager;
         this.functionsManager = functionsManager;
         this.pulsarAdmin = pulsarAdmin;
+        this.packageUrlValidator = packageUrlValidator;
     }
 
 
@@ -154,6 +155,9 @@ public class FunctionActioner {
         boolean isPkgUrlProvided = isFunctionPackageUrlSupported(packagePath);
         String packageFile;
         if (isPkgUrlProvided && packagePath.startsWith(FILE)) {
+            if (!packageUrlValidator.isValidPackageUrl(componentType, packagePath)) {
+                throw new IllegalArgumentException("Package URL " + packagePath + " is not valid");
+            }
             URL url = new URL(packagePath);
             File pkgFile = new File(url.toURI());
             packageFile = pkgFile.getAbsolutePath();
@@ -170,7 +174,7 @@ public class FunctionActioner {
                     pkgDir,
                     new File(getDownloadFileName(functionMetaData.getFunctionDetails(),
                             pkgLocation)).getName());
-            downloadFile(pkgFile, isPkgUrlProvided, functionMetaData, instanceId, pkgLocation);
+            downloadFile(pkgFile, isPkgUrlProvided, functionMetaData, instanceId, pkgLocation, componentType);
             packageFile = pkgFile.getAbsolutePath();
         }
         return packageFile;
@@ -181,7 +185,8 @@ public class FunctionActioner {
         FunctionMetaData functionMetaData = instance.getFunctionMetaData();
         int instanceId = instance.getInstanceId();
 
-        FunctionDetails.Builder functionDetailsBuilder = FunctionDetails.newBuilder(functionMetaData.getFunctionDetails());
+        FunctionDetails.Builder functionDetailsBuilder = FunctionDetails
+                .newBuilder(functionMetaData.getFunctionDetails());
 
         // check to make sure functionAuthenticationSpec has any data and authentication is enabled.
         // If not set to null, since for protobuf,
@@ -228,15 +233,15 @@ public class FunctionActioner {
     }
 
     private void downloadFile(File pkgFile, boolean isPkgUrlProvided, FunctionMetaData functionMetaData,
-                              int instanceId, Function.PackageLocationMetaData pkgLocation)
+                              int instanceId, Function.PackageLocationMetaData pkgLocation,
+                              FunctionDetails.ComponentType componentType)
             throws IOException, PulsarAdminException {
 
         FunctionDetails details = functionMetaData.getFunctionDetails();
         File pkgDir = pkgFile.getParentFile();
 
         if (pkgFile.exists()) {
-            log.warn("Function package exists already {} deleting it",
-                    pkgFile);
+            log.warn("Function package exists already {} deleting it", pkgFile);
             pkgFile.delete();
         }
 
@@ -244,7 +249,7 @@ public class FunctionActioner {
         do {
             tempPkgFile = new File(
                     pkgDir,
-                    pkgFile.getName() + "." + instanceId + "." + UUID.randomUUID().toString());
+                    pkgFile.getName() + "." + instanceId + "." + UUID.randomUUID());
         } while (tempPkgFile.exists() || !tempPkgFile.createNewFile());
         String pkgLocationPath = pkgLocation.getPackagePath();
         boolean downloadFromHttp = isPkgUrlProvided && pkgLocationPath.startsWith(HTTP);
@@ -253,7 +258,10 @@ public class FunctionActioner {
                 details.getNamespace(), details.getName(),
                 downloadFromHttp ? pkgLocationPath : pkgLocation);
 
-        if(downloadFromHttp) {
+        if (downloadFromHttp) {
+            if (!packageUrlValidator.isValidPackageUrl(componentType, pkgLocationPath)) {
+                throw new IllegalArgumentException("Package URL " + pkgLocationPath + " is not valid");
+            }
             FunctionCommon.downloadFromHttpUrl(pkgLocationPath, tempPkgFile);
         } else if (downloadFromPackageManagementService) {
             getPulsarAdmin().packages().download(pkgLocationPath, tempPkgFile.getPath());
@@ -286,7 +294,7 @@ public class FunctionActioner {
             tempPkgFile.delete();
         }
 
-        if(details.getRuntime() == Function.FunctionDetails.Runtime.GO && !pkgFile.canExecute()) {
+        if (details.getRuntime() == Function.FunctionDetails.Runtime.GO && !pkgFile.canExecute()) {
             pkgFile.setExecutable(true);
             log.info("Golang function package file {} is set to executable", pkgFile);
         }
@@ -328,7 +336,7 @@ public class FunctionActioner {
     public void terminateFunction(FunctionRuntimeInfo functionRuntimeInfo) {
         FunctionDetails details = functionRuntimeInfo.getFunctionInstance().getFunctionMetaData().getFunctionDetails();
         String fqfn = FunctionCommon.getFullyQualifiedName(details);
-        log.info("{}-{} Terminating function...", fqfn,functionRuntimeInfo.getFunctionInstance().getInstanceId());
+        log.info("{}-{} Terminating function...", fqfn, functionRuntimeInfo.getFunctionInstance().getInstanceId());
 
         if (functionRuntimeInfo.getRuntimeSpawner() != null) {
             functionRuntimeInfo.getRuntimeSpawner().close();
@@ -338,13 +346,15 @@ public class FunctionActioner {
                 functionRuntimeInfo.getRuntimeSpawner()
                         .getRuntimeFactory().getAuthProvider().ifPresent(functionAuthProvider -> {
                             try {
-                                log.info("{}-{} Cleaning up authentication data for function...", fqfn,functionRuntimeInfo.getFunctionInstance().getInstanceId());
+                                log.info("{}-{} Cleaning up authentication data for function...", fqfn,
+                                        functionRuntimeInfo.getFunctionInstance().getInstanceId());
                                 functionAuthProvider
                                         .cleanUpAuthData(
                                                 details,
                                                 Optional.ofNullable(getFunctionAuthData(
                                                         Optional.ofNullable(
-                                                                functionRuntimeInfo.getRuntimeSpawner().getInstanceConfig().getFunctionAuthenticationSpec()))));
+                                                        functionRuntimeInfo.getRuntimeSpawner().getInstanceConfig()
+                                                                .getFunctionAuthenticationSpec()))));
 
                             } catch (Exception e) {
                                 log.error("Failed to cleanup auth data for function: {}", fqfn, e);
@@ -366,11 +376,15 @@ public class FunctionActioner {
                     Function.ConsumerSpec consumerSpec = stringConsumerSpecEntry.getValue();
                     String topic = stringConsumerSpecEntry.getKey();
 
-                    String subscriptionName = isBlank(functionRuntimeInfo.getFunctionInstance().getFunctionMetaData().getFunctionDetails().getSource().getSubscriptionName())
-                            ? InstanceUtils.getDefaultSubscriptionName(functionRuntimeInfo.getFunctionInstance().getFunctionMetaData().getFunctionDetails())
-                            : functionRuntimeInfo.getFunctionInstance().getFunctionMetaData().getFunctionDetails().getSource().getSubscriptionName();
+                    String subscriptionName = isBlank(functionRuntimeInfo.getFunctionInstance()
+                            .getFunctionMetaData().getFunctionDetails().getSource().getSubscriptionName())
+                            ? InstanceUtils.getDefaultSubscriptionName(functionRuntimeInfo
+                            .getFunctionInstance().getFunctionMetaData().getFunctionDetails())
+                            : functionRuntimeInfo.getFunctionInstance().getFunctionMetaData()
+                            .getFunctionDetails().getSource().getSubscriptionName();
 
-                    deleteSubscription(topic, consumerSpec, subscriptionName, String.format("Cleaning up subscriptions for function %s", fqfn));
+                    deleteSubscription(topic, consumerSpec, subscriptionName,
+                            String.format("Cleaning up subscriptions for function %s", fqfn));
                 }
             });
         }
@@ -379,7 +393,8 @@ public class FunctionActioner {
         cleanupBatchSource(details);
     }
 
-    private void deleteSubscription(String topic, Function.ConsumerSpec consumerSpec, String subscriptionName, String msg) {
+    private void deleteSubscription(String topic, Function.ConsumerSpec consumerSpec,
+                                    String subscriptionName, String msg) {
         try {
             Actions.newBuilder()
                     .addAction(
@@ -584,21 +599,21 @@ public class FunctionActioner {
         }
     }
 
-    private static String getDownloadFileName(FunctionDetails FunctionDetails,
+    private static String getDownloadFileName(FunctionDetails functionDetails,
                                              Function.PackageLocationMetaData packageLocation) {
         if (!org.apache.commons.lang.StringUtils.isEmpty(packageLocation.getOriginalFileName())) {
             return packageLocation.getOriginalFileName();
         }
-        String[] hierarchy = FunctionDetails.getClassName().split("\\.");
+        String[] hierarchy = functionDetails.getClassName().split("\\.");
         String fileName;
         if (hierarchy.length <= 0) {
-            fileName = FunctionDetails.getClassName();
+            fileName = functionDetails.getClassName();
         } else if (hierarchy.length == 1) {
             fileName =  hierarchy[0];
         } else {
             fileName = hierarchy[hierarchy.length - 2];
         }
-        switch (FunctionDetails.getRuntime()) {
+        switch (functionDetails.getRuntime()) {
             case JAVA:
                 return fileName + ".jar";
             case PYTHON:
@@ -606,7 +621,7 @@ public class FunctionActioner {
             case GO:
                 return fileName + ".go";
             default:
-                throw new RuntimeException("Unknown runtime " + FunctionDetails.getRuntime());
+                throw new RuntimeException("Unknown runtime " + functionDetails.getRuntime());
         }
     }
 
@@ -624,13 +639,15 @@ public class FunctionActioner {
                 Actions.newBuilder()
                   .addAction(
                     Actions.Action.builder()
-                      .actionName(String.format("Creating intermediate topic %s with subscription %s for Batch Source %s",
+                      .actionName(String.format("Creating intermediate topic"
+                                      + "%s with subscription %s for Batch Source %s",
                         intermediateTopicName, intermediateTopicSubscription, fqfn))
                       .numRetries(10)
                       .sleepBetweenInvocationsMs(1000)
                       .supplier(() -> {
                           try {
-                              pulsarAdmin.topics().createSubscription(intermediateTopicName, intermediateTopicSubscription, MessageId.latest);
+                              pulsarAdmin.topics().createSubscription(intermediateTopicName,
+                                      intermediateTopicSubscription, MessageId.latest);
                               return Actions.ActionResult.builder()
                                 .success(true)
                                 .build();
@@ -658,7 +675,8 @@ public class FunctionActioner {
     private void cleanupBatchSource(Function.FunctionDetails functionDetails) {
         if (isBatchSource(functionDetails)) {
             // clean up intermediate topic
-            String intermediateTopicName = SourceConfigUtils.computeBatchSourceIntermediateTopicName(functionDetails.getTenant(),
+            String intermediateTopicName = SourceConfigUtils
+                    .computeBatchSourceIntermediateTopicName(functionDetails.getTenant(),
               functionDetails.getNamespace(), functionDetails.getName()).toString();
             String intermediateTopicSubscription = SourceConfigUtils.computeBatchSourceInstanceSubscriptionName(
               functionDetails.getTenant(), functionDetails.getNamespace(), functionDetails.getName());

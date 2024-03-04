@@ -142,7 +142,7 @@ public class SinksImpl extends ComponentImpl implements Sinks<PulsarWorkerServic
             // validate parameters
             try {
                 if (isNotBlank(sinkPkgUrl)) {
-                    componentPackageFile = getPackageFile(sinkPkgUrl);
+                    componentPackageFile = getPackageFile(componentType, sinkPkgUrl);
                     functionDetails = validateUpdateRequestParams(tenant, namespace, sinkName,
                             sinkConfig, componentPackageFile);
                 } else {
@@ -297,6 +297,7 @@ public class SinksImpl extends ComponentImpl implements Sinks<PulsarWorkerServic
             // validate parameters
             try {
                 componentPackageFile = getPackageFile(
+                        componentType,
                         sinkPkgUrl,
                         existingComponent.getPackageLocation().getPackagePath(),
                         uploadedInputStream);
