@@ -143,7 +143,7 @@ public class SourcesImpl extends ComponentImpl implements Sources<PulsarWorkerSe
             // validate parameters
             try {
                 if (isPkgUrlProvided) {
-                    componentPackageFile = getPackageFile(componentType, sourcePkgUrl);
+                    componentPackageFile = getPackageFile(sourcePkgUrl);
                     functionDetails = validateUpdateRequestParams(tenant, namespace, sourceName,
                             sourceConfig, componentPackageFile);
                 } else {
@@ -304,7 +304,6 @@ public class SourcesImpl extends ComponentImpl implements Sources<PulsarWorkerSe
             // validate parameters
             try {
                 componentPackageFile = getPackageFile(
-                        componentType,
                         sourcePkgUrl,
                         existingComponent.getPackageLocation().getPackagePath(),
                         uploadedInputStream);

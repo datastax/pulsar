@@ -220,8 +220,7 @@ public class FunctionRuntimeManager implements AutoCloseable {
                 functionAuthProvider, runtimeCustomizer);
 
         this.functionActioner = new FunctionActioner(this.workerConfig, runtimeFactory,
-                dlogNamespace, connectorsManager, functionsManager, workerService.getBrokerAdmin(),
-                workerService.getPackageUrlValidator());
+                dlogNamespace, connectorsManager, functionsManager, workerService.getBrokerAdmin());
 
         this.membershipManager = membershipManager;
         this.functionMetaDataManager = functionMetaDataManager;

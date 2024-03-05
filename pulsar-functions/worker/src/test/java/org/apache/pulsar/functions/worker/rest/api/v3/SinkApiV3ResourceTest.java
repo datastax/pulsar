@@ -36,7 +36,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -59,7 +58,6 @@ import org.apache.pulsar.functions.proto.Function;
 import org.apache.pulsar.functions.proto.Function.FunctionDetails;
 import org.apache.pulsar.functions.proto.Function.FunctionMetaData;
 import org.apache.pulsar.functions.utils.SinkConfigUtils;
-import org.apache.pulsar.functions.worker.WorkerConfig;
 import org.apache.pulsar.functions.worker.WorkerUtils;
 import org.apache.pulsar.functions.worker.rest.api.SinksImpl;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
@@ -82,12 +80,6 @@ public class SinkApiV3ResourceTest extends AbstractFunctionsResourceTest {
         this.resource = spy(new SinksImpl(() -> mockedWorkerService));
     }
 
-    @Override
-    protected void customizeWorkerConfig(WorkerConfig workerConfig, Method method) {
-        if (method.getName().contains("Upload") || method.getName().contains("BKPackage")) {
-            workerConfig.setFunctionsWorkerEnablePackageManagement(false);
-        }
-    }
     @Override
     protected Function.FunctionDetails.ComponentType getComponentType() {
         return Function.FunctionDetails.ComponentType.SINK;
@@ -1494,15 +1486,17 @@ public class SinkApiV3ResourceTest extends AbstractFunctionsResourceTest {
         SinkConfig sinkConfig = createDefaultSinkConfig();
         sinkConfig.setArchive("builtin://cassandra");
 
-        resource.registerSink(
-                tenant,
-                namespace,
-                sink,
-                null,
-                mockedFormData,
-                null,
-                sinkConfig,
-                null);
+        try (FileInputStream inputStream = new FileInputStream(getPulsarIOCassandraNar())) {
+            resource.registerSink(
+                    tenant,
+                    namespace,
+                    sink,
+                    inputStream,
+                    mockedFormData,
+                    null,
+                    sinkConfig,
+                    null);
+        }
     }
 
     /*
@@ -1532,19 +1526,21 @@ public class SinkApiV3ResourceTest extends AbstractFunctionsResourceTest {
         SinkConfig sinkConfig = createDefaultSinkConfig();
         sinkConfig.setArchive("builtin://cassandra");
 
-        try {
-            resource.registerSink(
-                    tenant,
-                    namespace,
-                    sink,
-                    null,
-                    mockedFormData,
-                    null,
-                    sinkConfig,
-                    null);
-            Assert.fail();
-        } catch (RuntimeException e) {
-            Assert.assertEquals(e.getMessage(), injectedErrMsg);
+        try (FileInputStream inputStream = new FileInputStream(getPulsarIOCassandraNar())) {
+            try {
+                resource.registerSink(
+                        tenant,
+                        namespace,
+                        sink,
+                        inputStream,
+                        mockedFormData,
+                        null,
+                        sinkConfig,
+                        null);
+                Assert.fail();
+            } catch (RuntimeException e) {
+                Assert.assertEquals(e.getMessage(), injectedErrMsg);
+            }
         }
     }
 
