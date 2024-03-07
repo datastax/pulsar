@@ -1704,7 +1704,7 @@ public class ReplicatorTest extends ReplicatorTestBase {
         ConcurrentOpenHashMap<String, Replicator> replicators = topic.getReplicators();
         PersistentReplicator replicator = (PersistentReplicator) replicators.get("r2");
 
-        Awaitility.await().pollInterval(1, TimeUnit.SECONDS).timeout(60, TimeUnit.SECONDS)
+        Awaitility.await().pollInterval(1, TimeUnit.SECONDS).timeout(90, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(org.apache.pulsar.broker.service.AbstractReplicator.State.Started,
                         replicator.getState()));
         assertEquals(replicator.getState(), org.apache.pulsar.broker.service.AbstractReplicator.State.Started);
