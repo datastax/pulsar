@@ -1707,6 +1707,7 @@ public class ReplicatorTest extends ReplicatorTestBase {
         Awaitility.await().pollInterval(1, TimeUnit.SECONDS).timeout(30, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(org.apache.pulsar.broker.service.AbstractReplicator.State.Started,
                         replicator.getState()));
+        
         assertEquals(replicator.getState(), org.apache.pulsar.broker.service.AbstractReplicator.State.Started);
 
         // Make sure all the data has replicated to the remote cluster before close the cursor.
