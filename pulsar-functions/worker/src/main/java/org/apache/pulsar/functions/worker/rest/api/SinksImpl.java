@@ -398,7 +398,7 @@ public class SinksImpl extends ComponentImpl implements Sinks<PulsarWorkerServic
         try {
             String builtin = functionDetails.getBuiltin();
             if (isBlank(builtin)) {
-                functionPackageFile = getPackageFile(transformFunction);
+                functionPackageFile = getPackageFile(componentType, transformFunction);
             }
             Function.PackageLocationMetaData.Builder functionPackageLocation =
                     getFunctionPackageLocation(functionMetaDataBuilder.build(),
@@ -716,7 +716,7 @@ public class SinksImpl extends ComponentImpl implements Sinks<PulsarWorkerServic
                 transformFunctionPackage =
                         getBuiltinFunctionPackage(sinkConfig.getTransformFunction());
                 if (transformFunctionPackage == null) {
-                    File functionPackageFile = getPackageFile(sinkConfig.getTransformFunction());
+                    File functionPackageFile = getPackageFile(componentType, sinkConfig.getTransformFunction());
                     transformFunctionPackage =
                             new FunctionFilePackage(functionPackageFile, workerConfig.getNarExtractionDirectory(),
                                     workerConfig.getEnableClassloadingOfExternalFiles(), ConnectorDefinition.class);
