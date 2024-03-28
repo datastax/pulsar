@@ -2640,7 +2640,7 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
         Awaitility.await().untilAsserted(() -> {
            assertEquals("LedgerOpened", WhiteboxImpl.getInternalState(managedLedger, "state").toString());
         });
-        managedLedger.rollCurrentLedgerIfFull();
+        managedLedger.createLedgerAfterClosed();
         Awaitility.await().untilAsserted(() -> {
             assertEquals(managedLedger.getLedgersInfo().size(), 3);
             assertEquals(managedLedger.getState(), ManagedLedgerImpl.State.LedgerOpened);
