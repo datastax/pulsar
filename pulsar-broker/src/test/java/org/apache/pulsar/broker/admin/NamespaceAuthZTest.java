@@ -19,42 +19,92 @@
 
 package org.apache.pulsar.broker.admin;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.Sets;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import lombok.Cleanup;
+import lombok.Getter;
 import lombok.SneakyThrows;
+import org.apache.pulsar.broker.PulsarService;
+import org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest;
+import org.apache.pulsar.broker.authentication.AuthenticationProviderToken;
+import org.apache.pulsar.broker.authentication.utils.AuthTokenUtils;
+import org.apache.pulsar.broker.authorization.PulsarAuthorizationProvider;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.impl.auth.AuthenticationToken;
 import org.apache.pulsar.common.policies.data.AuthAction;
+import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.TenantInfo;
-import org.apache.pulsar.security.MockedPulsarStandalone;
 import org.testng.Assert;
-import org.testng.annotations.AfterClass;
-import org.testng.annotations.BeforeClass;
-import org.testng.annotations.Test;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import org.testng.annotations.*;
+
+import javax.crypto.SecretKey;
+import java.util.*;
+import java.util.Optional;
 
 @Test(groups = "broker-admin")
-public class NamespaceAuthZTest extends MockedPulsarStandalone {
+public class NamespaceAuthZTest extends MockedPulsarServiceBaseTest{
 
     private PulsarAdmin superUserAdmin;
-
     private PulsarAdmin tenantManagerAdmin;
+    @Getter
+    private PulsarService pulsarService;
+    private PulsarAdmin serviceInternalAdmin;
 
+    private static final SecretKey SECRET_KEY = AuthTokenUtils.createSecretKey(SignatureAlgorithm.HS256);
     private static final String TENANT_ADMIN_SUBJECT =  UUID.randomUUID().toString();
     private static final String TENANT_ADMIN_TOKEN = Jwts.builder()
             .claim("sub", TENANT_ADMIN_SUBJECT).signWith(SECRET_KEY).compact();
 
-    @SneakyThrows
+    protected static final String SUPER_USER_SUBJECT = "super-user";
+
+    protected static final String SUPER_USER_TOKEN = Jwts.builder()
+            .claim("sub", SUPER_USER_SUBJECT).signWith(SECRET_KEY).compact();
+    private static final String BROKER_INTERNAL_CLIENT_SUBJECT = "broker_internal";
+    private static final String BROKER_INTERNAL_CLIENT_TOKEN = Jwts.builder()
+            .claim("sub", BROKER_INTERNAL_CLIENT_SUBJECT).signWith(SECRET_KEY).compact();
+
+    protected static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static final String DEFAULT_TENANT = "public";
+    private static final String DEFAULT_NAMESPACE = "public/default";
+    private static final String TEST_CLUSTER_NAME = "test-standalone";
+
+    {
+        conf.setClusterName(TEST_CLUSTER_NAME);
+        conf.setBrokerShutdownTimeoutMs(0L);
+        conf.setBrokerServicePort(Optional.of(0));
+        conf.setBrokerServicePortTls(Optional.of(0));
+        conf.setAdvertisedAddress("localhost");
+        conf.setWebServicePort(Optional.of(0));
+        conf.setWebServicePortTls(Optional.of(0));
+        conf.setNumExecutorThreadPoolSize(5);
+        conf.setExposeBundlesMetricsInPrometheus(true);
+    }
+
+    @Override
     @BeforeClass
-    public void before() {
+    protected void setup() throws Exception {
+        // enable auth&auth and use JWT at broker
+        conf.setAuthenticationEnabled(true);
+        conf.setAuthorizationEnabled(true);
+        conf.getProperties().setProperty("tokenSecretKey", "data:;base64,"
+                + Base64.getEncoder().encodeToString(SECRET_KEY.getEncoded()));
+        Set<String> superUserRoles = new HashSet<>();
+        superUserRoles.add("admin");
+        conf.setSuperUserRoles(superUserRoles);
+        Set<String> providers = new HashSet<>();
+        providers.add(AuthenticationProviderToken.class.getName());
+        conf.setAuthenticationProviders(providers);
         configureTokenAuthentication();
         configureDefaultAuthorization();
-        start();
-        this.superUserAdmin =PulsarAdmin.builder()
+        super.internalSetup();
+        this.pulsarService = getPulsar();
+        this.serviceInternalAdmin = pulsarService.getAdminClient();
+        setupDefaultTenantAndNamespace();
+        this.superUserAdmin = PulsarAdmin.builder()
                 .serviceHttpUrl(getPulsarService().getWebServiceAddress())
                 .authentication(new AuthenticationToken(SUPER_USER_TOKEN))
                 .build();
@@ -67,19 +117,56 @@ public class NamespaceAuthZTest extends MockedPulsarStandalone {
                 .build();
     }
 
-
-    @SneakyThrows
-    @AfterClass
-    public void after() {
-        if (superUserAdmin != null) {
-            superUserAdmin.close();
+    protected void setupDefaultTenantAndNamespace() throws Exception {
+        if (!serviceInternalAdmin.clusters().getClusters().contains(TEST_CLUSTER_NAME)) {
+            serviceInternalAdmin.clusters().createCluster(TEST_CLUSTER_NAME,
+                    ClusterData.builder().serviceUrl(pulsarService.getWebServiceAddress()).build());
         }
-        if (tenantManagerAdmin != null) {
-            tenantManagerAdmin.close();
+        if (!serviceInternalAdmin.tenants().getTenants().contains(DEFAULT_TENANT)) {
+            serviceInternalAdmin.tenants().createTenant(DEFAULT_TENANT, TenantInfo.builder().allowedClusters(
+                    Sets.newHashSet(TEST_CLUSTER_NAME)).build());
         }
-        close();
+        if (!serviceInternalAdmin.namespaces().getNamespaces(DEFAULT_TENANT).contains(DEFAULT_NAMESPACE)) {
+            serviceInternalAdmin.namespaces().createNamespace(DEFAULT_NAMESPACE);
+        }
     }
 
+    @SneakyThrows
+    protected void configureTokenAuthentication() {
+        conf.setAuthenticationEnabled(true);
+        Set<String> authenticationProviders = new HashSet<>();
+        authenticationProviders.add(AuthenticationProviderToken.class.getName());
+        conf.setAuthenticationProviders(authenticationProviders);
+        // internal client
+        conf.setBrokerClientAuthenticationPlugin(AuthenticationToken.class.getName());
+        final Map<String, String> brokerClientAuthParams = new HashMap<>();
+        brokerClientAuthParams.put("token", BROKER_INTERNAL_CLIENT_TOKEN);
+        final String brokerClientAuthParamStr = MAPPER.writeValueAsString(brokerClientAuthParams);
+        conf.setBrokerClientAuthenticationParameters(brokerClientAuthParamStr);
+
+        Properties properties = conf.getProperties();
+        if (properties == null) {
+            properties = new Properties();
+            conf.setProperties(properties);
+        }
+        properties.put("tokenSecretKey", AuthTokenUtils.encodeKeyBase64(SECRET_KEY));
+
+    }
+
+    protected void configureDefaultAuthorization() {
+        conf.setAuthorizationEnabled(true);
+        conf.setAuthorizationProvider(PulsarAuthorizationProvider.class.getName());
+        Set<String> superUserRoles = new HashSet<>();
+        superUserRoles.add(SUPER_USER_SUBJECT);
+        superUserRoles.add(BROKER_INTERNAL_CLIENT_SUBJECT);
+        conf.setSuperUserRoles(superUserRoles);
+    }
+
+    @Override
+    @AfterClass
+    protected void cleanup() throws Exception {
+        super.internalCleanup();
+    }
 
     @SneakyThrows
     @Test
@@ -136,7 +223,9 @@ public class NamespaceAuthZTest extends MockedPulsarStandalone {
                 () -> subAdmin.namespaces().clearProperties(namespace));
 
         for (AuthAction action : AuthAction.values()) {
-            superUserAdmin.namespaces().grantPermissionOnNamespace(namespace, subject, Set.of(action));
+            Set<AuthAction> actions = new HashSet<>();
+            actions.add(action);
+            superUserAdmin.namespaces().grantPermissionOnNamespace(namespace, subject, actions);
             Assert.assertThrows(PulsarAdminException.NotAuthorizedException.class,
                     () -> subAdmin.namespaces().setProperties(namespace, properties));
 
