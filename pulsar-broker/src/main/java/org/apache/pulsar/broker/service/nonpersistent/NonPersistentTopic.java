@@ -778,7 +778,7 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                 // Close Consumer stats
                 topicStatsStream.endList();
 
-                long msgBacklog = subscription.getNumberOfEntriesInBacklog(true);
+                long msgBacklog = subscription.getNumberOfEntriesInBacklog(false);
                 // Populate subscription specific stats here
                 topicStatsStream.writePair("msgBacklog", msgBacklog);
                 topicStatsStream.writePair("msgRateExpired", subscription.getExpiredMessageRate());

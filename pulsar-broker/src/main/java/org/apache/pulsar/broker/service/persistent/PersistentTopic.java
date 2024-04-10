@@ -2153,7 +2153,7 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                 // Close Consumer stats
                 topicStatsStream.endList();
 
-                long msgBacklog = subscription.getNumberOfEntriesInBacklog(true);
+                long msgBacklog = subscription.getNumberOfEntriesInBacklog(false);
                 // Populate subscription specific stats here
                 topicStatsStream.writePair("msgBacklog", msgBacklog);
                 subscription.getExpiryMonitor().updateRates();
