@@ -2144,9 +2144,9 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                 // Close Consumer stats
                 topicStatsStream.endList();
 
+                long msgBacklog = subscription.getNumberOfEntriesInBacklog(true);
                 // Populate subscription specific stats here
-                topicStatsStream.writePair("msgBacklog",
-                        subscription.getNumberOfEntriesInBacklog(true));
+                topicStatsStream.writePair("msgBacklog", msgBacklog);
                 subscription.getExpiryMonitor().updateRates();
                 topicStatsStream.writePair("msgRateExpired", subscription.getExpiredMessageRate());
                 topicStatsStream.writePair("msgRateOut", subMsgRateOut);
@@ -2159,16 +2159,22 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                         subscription.getTotalNonContiguousDeletedMessagesRange());
                 topicStatsStream.writePair("type", subscription.getTypeString());
 
+                // Write entry filter stats
                 Dispatcher dispatcher0 = subscription.getDispatcher();
                 if (null != dispatcher0) {
+                    long filterProcessedMsgCount = dispatcher0.getFilterProcessedMsgCount();
                     topicStatsStream.writePair("filterProcessedMsgCount",
-                            dispatcher0.getFilterProcessedMsgCount());
+                                               filterProcessedMsgCount);
+                    long filterAcceptedMsgCount = dispatcher0.getFilterAcceptedMsgCount();
                     topicStatsStream.writePair("filterAcceptedMsgCount",
-                            dispatcher0.getFilterAcceptedMsgCount());
+                                               filterAcceptedMsgCount);
                     topicStatsStream.writePair("filterRejectedMsgCount",
-                            dispatcher0.getFilterRejectedMsgCount());
+                                               dispatcher0.getFilterRejectedMsgCount());
                     topicStatsStream.writePair("filterRescheduledMsgCount",
-                            dispatcher0.getFilterRescheduledMsgCount());
+                                               dispatcher0.getFilterRescheduledMsgCount());
+                    topicStatsStream.writePair("filterEstimatedBacklog",
+                                               SubscriptionStatsImpl.computeFilterEstimatedBacklog(
+                                               msgBacklog, filterProcessedMsgCount, filterAcceptedMsgCount));
                 }
 
                 if (Subscription.isIndividualAckMode(subscription.getType())) {

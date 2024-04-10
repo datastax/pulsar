@@ -136,4 +136,11 @@ public interface SubscriptionStats {
     long getFilterRescheduledMsgCount();
 
     long getDelayedMessageIndexSizeInBytes();
+
+    /**
+     * Estimated number of entries in the subscription backlog considering only messages
+     * that would be accepted by filters assuming that the rate of messages being accepted
+     * is constant over time.
+     **/
+    long getFilterEstimatedBacklog();
 }

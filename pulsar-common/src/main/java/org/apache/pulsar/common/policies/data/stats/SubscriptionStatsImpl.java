@@ -249,4 +249,25 @@ public class SubscriptionStatsImpl implements SubscriptionStats {
 
         return this;
     }
+
+    @Override
+    public long getFilterEstimatedBacklog() {
+        return computeFilterEstimatedBacklog(msgBacklog, filterProcessedMsgCount, filterAcceptedMsgCount);
+    }
+
+    public static long computeFilterEstimatedBacklog(long msgBacklog, long filterProcessedMsgCount,
+                                                     long filterAcceptedMsgCount) {
+        if (msgBacklog <= 0) {
+            return 0;
+        }
+        // we don't have local stats about the number of messages that were filtered out, so we can't provide an
+        // estimate
+        if (filterProcessedMsgCount <= 0
+            || filterProcessedMsgCount == filterAcceptedMsgCount) {
+            return msgBacklog;
+        }
+
+        double acceptedRate = (filterAcceptedMsgCount * 1.0) / filterProcessedMsgCount;
+        return (long) (msgBacklog * acceptedRate);
+    }
 }

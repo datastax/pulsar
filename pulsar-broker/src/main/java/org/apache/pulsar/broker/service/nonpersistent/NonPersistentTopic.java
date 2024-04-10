@@ -778,8 +778,9 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                 // Close Consumer stats
                 topicStatsStream.endList();
 
+                long msgBacklog = subscription.getNumberOfEntriesInBacklog(true);
                 // Populate subscription specific stats here
-                topicStatsStream.writePair("msgBacklog", subscription.getNumberOfEntriesInBacklog(false));
+                topicStatsStream.writePair("msgBacklog", msgBacklog);
                 topicStatsStream.writePair("msgRateExpired", subscription.getExpiredMessageRate());
                 topicStatsStream.writePair("msgRateOut", subMsgRateOut);
                 topicStatsStream.writePair("messageAckRate", subMsgAckRate);
@@ -790,14 +791,19 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                 // Write entry filter stats
                 Dispatcher dispatcher0 = subscription.getDispatcher();
                 if (null != dispatcher0) {
+                    long filterProcessedMsgCount = dispatcher0.getFilterProcessedMsgCount();
                     topicStatsStream.writePair("filterProcessedMsgCount",
-                            dispatcher0.getFilterProcessedMsgCount());
+                                               filterProcessedMsgCount);
+                    long filterAcceptedMsgCount = dispatcher0.getFilterAcceptedMsgCount();
                     topicStatsStream.writePair("filterAcceptedMsgCount",
-                            dispatcher0.getFilterAcceptedMsgCount());
+                                               filterAcceptedMsgCount);
                     topicStatsStream.writePair("filterRejectedMsgCount",
                             dispatcher0.getFilterRejectedMsgCount());
                     topicStatsStream.writePair("filterRescheduledMsgCount",
                             dispatcher0.getFilterRescheduledMsgCount());
+                    topicStatsStream.writePair("filterEstimatedBacklog",
+                                               SubscriptionStatsImpl.computeFilterEstimatedBacklog(
+                                               msgBacklog, filterProcessedMsgCount, filterAcceptedMsgCount));
                 }
 
                 if (subscription.getDispatcher() != null) {
