@@ -102,14 +102,6 @@ public interface Subscription extends MessageExpirer {
 
     CompletableFuture<Void> updateSubscriptionProperties(Map<String, String> subscriptionProperties);
 
-    default CompletableFuture<Void> persistFilterStats() {
-        return CompletableFuture.completedFuture(null);
-    }
-
-    default double getFilterAcceptedRateEstimation() {
-        return 1.0;
-    }
-
     default void processReplicatedSubscriptionSnapshot(ReplicatedSubscriptionsSnapshot snapshot) {
         // Default is no-op
     }

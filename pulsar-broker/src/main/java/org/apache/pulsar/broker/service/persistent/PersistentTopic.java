@@ -1708,6 +1708,15 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
         }
     }
 
+    public void updateFilterStats() {
+        subscriptions.forEach((__, sub) -> {
+            if (sub.getDispatcher() != null) {
+                sub.updateFilterStats();
+            }
+        });
+    }
+
+
     @Override
     public void checkMessageDeduplicationInfo() {
         messageDeduplication.purgeInactiveProducers();
@@ -2175,7 +2184,8 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                 }
 
                 topicStatsStream.writePair("filterEstimatedBacklog",
-                        SubscriptionStatsImpl.computeFilterEstimatedBacklog(msgBacklog, subscription.getFilterAcceptedRateEstimation()));
+                        SubscriptionStatsImpl.computeFilterEstimatedBacklog(msgBacklog,
+                                subscription.getFilterAcceptedRateEstimation()));
 
                 if (Subscription.isIndividualAckMode(subscription.getType())) {
                     if (subscription.getDispatcher() instanceof PersistentDispatcherMultipleConsumers) {

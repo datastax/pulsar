@@ -226,6 +226,7 @@ public class BrokerService implements Closeable {
 
     private AuthorizationService authorizationService;
     private final ScheduledExecutorService statsUpdater;
+    private final ScheduledExecutorService filterStatsUpdater;
     @Getter
     private final ScheduledExecutorService backlogQuotaChecker;
 
@@ -329,6 +330,10 @@ public class BrokerService implements Closeable {
         this.workerGroup = eventLoopGroup;
         this.statsUpdater = OrderedScheduler.newSchedulerBuilder()
                 .name("pulsar-stats-updater")
+                .numThreads(1)
+                .build();
+        this.filterStatsUpdater = OrderedScheduler.newSchedulerBuilder()
+                .name("pulsar-filter-stats-updater")
                 .numThreads(1)
                 .build();
         this.authorizationService = new AuthorizationService(
@@ -577,6 +582,11 @@ public class BrokerService implements Closeable {
 
         // Ensure the broker starts up with initial stats
         updateRates();
+    }
+
+    protected void startFilterStatsUpdater(int statsUpdateInitialDelayInSecs, int statsUpdateFrequencyInSecs) {
+        filterStatsUpdater.scheduleAtFixedRate(this::updateFilterStats,
+                statsUpdateInitialDelayInSecs, statsUpdateFrequencyInSecs, TimeUnit.SECONDS);
     }
 
     protected void startDeduplicationSnapshotMonitor() {
@@ -872,6 +882,7 @@ public class BrokerService implements Closeable {
                                                                 .getBrokerShutdownTimeoutMs())))
                                         .shutdown(
                                                 statsUpdater,
+                                                filterStatsUpdater,
                                                 inactivityMonitor,
                                                 messageExpiryMonitor,
                                                 compactionMonitor,
@@ -2066,6 +2077,10 @@ public class BrokerService implements Closeable {
 
             Summary.rotateLatencyCollection();
         }
+    }
+
+    public void updateFilterStats() {
+        forEachPersistentTopic(PersistentTopic::updateFilterStats);
     }
 
     public void getDimensionMetrics(Consumer<ByteBuf> consumer) {

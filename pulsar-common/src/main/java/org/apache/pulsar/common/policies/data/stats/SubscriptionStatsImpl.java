@@ -258,7 +258,7 @@ public class SubscriptionStatsImpl implements SubscriptionStats {
 
     public static long computeFilterEstimatedBacklog(long msgBacklog, double acceptedRate) {
         if (msgBacklog <= 0) {
-            return 0;
+            return msgBacklog;
         }
         return (long) (msgBacklog * acceptedRate);
     }

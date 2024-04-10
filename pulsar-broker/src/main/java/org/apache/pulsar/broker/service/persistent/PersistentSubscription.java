@@ -38,6 +38,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import lombok.Getter;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.ClearBacklogCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.DeleteCallback;
@@ -132,6 +133,7 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
     private volatile Map<String, String> subscriptionProperties;
     private volatile CompletableFuture<Void> fenceFuture;
 
+    @Getter
     private volatile double filterAcceptedRateEstimation;
 
     static Map<String, Long> getBaseCursorProperties(boolean isReplicated) {
@@ -1311,12 +1313,11 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
                 });
     }
 
-    @Override
-    public CompletableFuture<Void> persistFilterStats() {
+    public void updateFilterStats() {
         Dispatcher dispatcher0 = getDispatcher();
         if (dispatcher0 == null) {
             // dispatcher is not initialized yet
-            return CompletableFuture.completedFuture(null);
+            return;
         }
         double oldFilterAcceptedRateEstimation = this.filterAcceptedRateEstimation;
 
@@ -1326,7 +1327,7 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
 
         if (oldFilterAcceptedRateEstimation == 1.0 && processed == accepted) {
             // filter is accepting all the messages
-            return CompletableFuture.completedFuture(null);
+            return;
         }
 
         double currentFilterAcceptedRateEstimation = 1.0;
@@ -1339,15 +1340,21 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
 
         if (oldFilterAcceptedRateEstimation == filterAcceptedRateEstimation) {
             // no need to write to metadata store
-            return CompletableFuture.completedFuture(null);
+            return;
         }
 
         log.info("Persist new filter stats for subscription {} on topic {} : filterAcceptedRateEstimation={}",
                 getName(), getTopic().getName(), currentFilterAcceptedRateEstimation);
 
         Map<String, String> subscriptionProperties = new HashMap<>(getSubscriptionProperties());
-        subscriptionProperties.put("filterAcceptedRateEstimation", Double.toString(currentFilterAcceptedRateEstimation));
-        return updateSubscriptionProperties(subscriptionProperties);
+        subscriptionProperties.put("filterAcceptedRateEstimation",
+                Double.toString(currentFilterAcceptedRateEstimation));
+        updateSubscriptionProperties(subscriptionProperties).whenComplete((ignore, ex) -> {
+            if (ex != null) {
+                log.warn("Failed to persist filter stats for subscription {} on topic {}",
+                        getName(), getTopic().getName(), ex);
+            }
+        });
     }
 
     private void readPersistedFilterProcessingStats() {
@@ -1365,11 +1372,6 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
         } else {
             this.filterAcceptedRateEstimation = 1;
         }
-    }
-
-    @Override
-    public double getFilterAcceptedRateEstimation() {
-        return filterAcceptedRateEstimation;
     }
 
     /**
