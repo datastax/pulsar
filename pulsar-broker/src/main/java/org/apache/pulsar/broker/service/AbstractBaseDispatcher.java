@@ -67,13 +67,11 @@ public abstract class AbstractBaseDispatcher extends EntryFilterSupport implemen
     private final LongAdder filterAcceptedMsgs = new LongAdder();
     private final LongAdder filterRejectedMsgs = new LongAdder();
     private final LongAdder filterRescheduledMsgs = new LongAdder();
-
     protected AbstractBaseDispatcher(Subscription subscription, ServiceConfiguration serviceConfig) {
         super(subscription);
         this.serviceConfig = serviceConfig;
         this.dispatchThrottlingOnBatchMessageEnabled = serviceConfig.isDispatchThrottlingOnBatchMessageEnabled();
     }
-
 
     /**
      * Filter messages that are being sent to a consumers.

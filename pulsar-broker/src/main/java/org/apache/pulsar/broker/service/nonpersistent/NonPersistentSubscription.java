@@ -454,6 +454,7 @@ public class NonPersistentSubscription extends AbstractSubscription implements S
             subStats.filterAcceptedMsgCount = dispatcher.getFilterAcceptedMsgCount();
             subStats.filterRejectedMsgCount = dispatcher.getFilterRejectedMsgCount();
             subStats.filterRescheduledMsgCount = dispatcher.getFilterRescheduledMsgCount();
+            subStats.filterEstimatedBacklog = -1;
         }
 
         subStats.type = getTypeString();

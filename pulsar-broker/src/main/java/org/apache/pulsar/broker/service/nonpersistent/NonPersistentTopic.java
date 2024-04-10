@@ -788,6 +788,8 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                 topicStatsStream.writePair("msgRateRedeliver", subMsgRateRedeliver);
                 topicStatsStream.writePair("type", subscription.getTypeString());
 
+                double filterEstimatedBacklog = msgBacklog;
+
                 // Write entry filter stats
                 Dispatcher dispatcher0 = subscription.getDispatcher();
                 if (null != dispatcher0) {
@@ -801,10 +803,11 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                             dispatcher0.getFilterRejectedMsgCount());
                     topicStatsStream.writePair("filterRescheduledMsgCount",
                             dispatcher0.getFilterRescheduledMsgCount());
-                    topicStatsStream.writePair("filterEstimatedBacklog",
-                                               SubscriptionStatsImpl.computeFilterEstimatedBacklog(
-                                               msgBacklog, filterProcessedMsgCount, filterAcceptedMsgCount));
+                    filterEstimatedBacklog = SubscriptionStatsImpl.computeFilterEstimatedBacklog(msgBacklog,
+                            filterProcessedMsgCount, filterAcceptedMsgCount);
                 }
+
+                topicStatsStream.writePair("filterEstimatedBacklog", filterEstimatedBacklog);
 
                 if (subscription.getDispatcher() != null) {
                     subscription.getDispatcher().getMessageDropRate().calculateRate();

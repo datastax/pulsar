@@ -149,6 +149,8 @@ public class SubscriptionStatsImpl implements SubscriptionStats {
 
     public long filterRescheduledMsgCount;
 
+    public long filterEstimatedBacklog;
+
     public SubscriptionStatsImpl() {
         this.consumers = new ArrayList<>();
         this.consumersAfterMarkDeletePosition = new LinkedHashMap<>();
@@ -184,6 +186,7 @@ public class SubscriptionStatsImpl implements SubscriptionStats {
         filterAcceptedMsgCount = 0;
         filterRejectedMsgCount = 0;
         filterRescheduledMsgCount = 0;
+        filterEstimatedBacklog = 0;
         bucketDelayedIndexStats.clear();
     }
 
@@ -239,6 +242,8 @@ public class SubscriptionStatsImpl implements SubscriptionStats {
         this.filterAcceptedMsgCount += stats.filterAcceptedMsgCount;
         this.filterRejectedMsgCount += stats.filterRejectedMsgCount;
         this.filterRescheduledMsgCount += stats.filterRescheduledMsgCount;
+        this.filterEstimatedBacklog += stats.filterEstimatedBacklog;
+
         stats.bucketDelayedIndexStats.forEach((k, v) -> {
             TopicMetricBean topicMetricBean =
                     this.bucketDelayedIndexStats.computeIfAbsent(k, __ -> new TopicMetricBean());
@@ -250,24 +255,16 @@ public class SubscriptionStatsImpl implements SubscriptionStats {
         return this;
     }
 
-    @Override
-    public long getFilterEstimatedBacklog() {
-        return computeFilterEstimatedBacklog(msgBacklog, filterProcessedMsgCount, filterAcceptedMsgCount);
-    }
 
-    public static long computeFilterEstimatedBacklog(long msgBacklog, long filterProcessedMsgCount,
-                                                     long filterAcceptedMsgCount) {
+    public static long computeFilterEstimatedBacklog(long msgBacklog, double acceptedRate) {
         if (msgBacklog <= 0) {
             return 0;
         }
-        // we don't have local stats about the number of messages that were filtered out, so we can't provide an
-        // estimate
-        if (filterProcessedMsgCount <= 0
-            || filterProcessedMsgCount == filterAcceptedMsgCount) {
-            return msgBacklog;
-        }
-
-        double acceptedRate = (filterAcceptedMsgCount * 1.0) / filterProcessedMsgCount;
         return (long) (msgBacklog * acceptedRate);
+    }
+
+    public static long computeFilterEstimatedBacklog(long msgBacklog, long processed, long accepted) {
+        double acceptedRate = processed > 0 ? accepted * 1.0 / processed : 1;
+        return computeFilterEstimatedBacklog(msgBacklog, acceptedRate);
     }
 }

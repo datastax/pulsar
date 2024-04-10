@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.netty.buffer.ByteBuf;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,6 +132,8 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
     private volatile Map<String, String> subscriptionProperties;
     private volatile CompletableFuture<Void> fenceFuture;
 
+    private volatile double filterAcceptedRateEstimation;
+
     static Map<String, Long> getBaseCursorProperties(boolean isReplicated) {
         return isReplicated ? REPLICATED_SUBSCRIPTION_CURSOR_PROPERTIES : NON_REPLICATED_SUBSCRIPTION_CURSOR_PROPERTIES;
     }
@@ -155,6 +158,9 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
         this.setReplicated(replicated);
         this.subscriptionProperties = MapUtils.isEmpty(subscriptionProperties)
                 ? Collections.emptyMap() : Collections.unmodifiableMap(subscriptionProperties);
+
+        readPersistedFilterProcessingStats();
+
         if (topic.getBrokerService().getPulsar().getConfig().isTransactionCoordinatorEnabled()
                 && !isEventSystemTopic(TopicName.get(topicName))
                 && !ExtensibleLoadManagerImpl.isInternalTopic(topicName)) {
@@ -1183,6 +1189,8 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
             }
         }
         subStats.msgBacklog = getNumberOfEntriesInBacklog(getPreciseBacklog);
+        subStats.filterEstimatedBacklog = SubscriptionStatsImpl
+                .computeFilterEstimatedBacklog(subStats.msgBacklog, filterAcceptedRateEstimation);
         if (subscriptionBacklogSize) {
             subStats.backlogSize = ((ManagedLedgerImpl) topic.getManagedLedger())
                     .getEstimatedBacklogSize((PositionImpl) cursor.getMarkDeletedPosition());
@@ -1302,6 +1310,68 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
                     this.subscriptionProperties = newSubscriptionProperties;
                 });
     }
+
+    @Override
+    public CompletableFuture<Void> persistFilterStats() {
+        Dispatcher dispatcher0 = getDispatcher();
+        if (dispatcher0 == null) {
+            // dispatcher is not initialized yet
+            return CompletableFuture.completedFuture(null);
+        }
+        double oldFilterAcceptedRateEstimation = this.filterAcceptedRateEstimation;
+
+        // update the estimated filter accepted rate
+        long processed = dispatcher0.getFilterProcessedMsgCount();
+        long accepted = dispatcher0.getFilterAcceptedMsgCount();
+
+        if (oldFilterAcceptedRateEstimation == 1.0 && processed == accepted) {
+            // filter is accepting all the messages
+            return CompletableFuture.completedFuture(null);
+        }
+
+        double currentFilterAcceptedRateEstimation = 1.0;
+        if (processed != accepted && processed > 0) {
+            currentFilterAcceptedRateEstimation = accepted * 1.0 / processed;
+        }
+
+        //TODO: take time into consideration
+        this.filterAcceptedRateEstimation = (oldFilterAcceptedRateEstimation + currentFilterAcceptedRateEstimation) / 2;
+
+        if (oldFilterAcceptedRateEstimation == filterAcceptedRateEstimation) {
+            // no need to write to metadata store
+            return CompletableFuture.completedFuture(null);
+        }
+
+        log.info("Persist new filter stats for subscription {} on topic {} : filterAcceptedRateEstimation={}",
+                getName(), getTopic().getName(), currentFilterAcceptedRateEstimation);
+
+        Map<String, String> subscriptionProperties = new HashMap<>(getSubscriptionProperties());
+        subscriptionProperties.put("filterAcceptedRateEstimation", Double.toString(currentFilterAcceptedRateEstimation));
+        return updateSubscriptionProperties(subscriptionProperties);
+    }
+
+    private void readPersistedFilterProcessingStats() {
+        String filterAcceptedRateEstimation = getSubscriptionProperties().get("filterAcceptedRateEstimation");
+        if (filterAcceptedRateEstimation != null && !filterAcceptedRateEstimation.isBlank()) {
+            try {
+                this.filterAcceptedRateEstimation = Double.parseDouble(filterAcceptedRateEstimation);
+                log.info("Loaded filterAcceptedRateEstimation for subscription {} on topic {} : {}",
+                        getName(), getTopic().getName(), filterAcceptedRateEstimation);
+            } catch (IllegalArgumentException e) {
+                log.warn("Failed to parse filterAcceptedRateEstimation for subscription {} on topic {}",
+                        getName(), getTopic().getName(), e);
+                this.filterAcceptedRateEstimation = 1;
+            }
+        } else {
+            this.filterAcceptedRateEstimation = 1;
+        }
+    }
+
+    @Override
+    public double getFilterAcceptedRateEstimation() {
+        return filterAcceptedRateEstimation;
+    }
+
     /**
      * Return a merged map that contains the cursor properties specified by used
      * (eg. when using compaction subscription) and the subscription properties.

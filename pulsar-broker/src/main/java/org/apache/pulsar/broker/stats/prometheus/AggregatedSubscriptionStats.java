@@ -73,6 +73,8 @@ public class AggregatedSubscriptionStats {
 
     long filterRescheduledMsgCount;
 
+    long filterEstimatedBacklog;
+
     public Map<Consumer, AggregatedConsumerStats> consumerStat = new HashMap<>();
 
     long delayedMessageIndexSizeInBytes;

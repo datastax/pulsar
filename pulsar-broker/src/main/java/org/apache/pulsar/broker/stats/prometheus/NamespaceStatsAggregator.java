@@ -155,6 +155,7 @@ public class NamespaceStatsAggregator {
         subsStats.filterAcceptedMsgCount = subscriptionStats.filterAcceptedMsgCount;
         subsStats.filterRejectedMsgCount = subscriptionStats.filterRejectedMsgCount;
         subsStats.filterRescheduledMsgCount = subscriptionStats.filterRescheduledMsgCount;
+        subsStats.filterEstimatedBacklog += subscriptionStats.filterEstimatedBacklog;
         subsStats.delayedMessageIndexSizeInBytes = subscriptionStats.delayedMessageIndexSizeInBytes;
         subsStats.bucketDelayedIndexStats = subscriptionStats.bucketDelayedIndexStats;
     }

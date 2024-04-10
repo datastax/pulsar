@@ -2172,10 +2172,10 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                                                dispatcher0.getFilterRejectedMsgCount());
                     topicStatsStream.writePair("filterRescheduledMsgCount",
                                                dispatcher0.getFilterRescheduledMsgCount());
-                    topicStatsStream.writePair("filterEstimatedBacklog",
-                                               SubscriptionStatsImpl.computeFilterEstimatedBacklog(
-                                               msgBacklog, filterProcessedMsgCount, filterAcceptedMsgCount));
                 }
+
+                topicStatsStream.writePair("filterEstimatedBacklog",
+                        SubscriptionStatsImpl.computeFilterEstimatedBacklog(msgBacklog, subscription.getFilterAcceptedRateEstimation()));
 
                 if (Subscription.isIndividualAckMode(subscription.getType())) {
                     if (subscription.getDispatcher() instanceof PersistentDispatcherMultipleConsumers) {

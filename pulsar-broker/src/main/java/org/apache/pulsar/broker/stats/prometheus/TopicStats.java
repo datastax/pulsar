@@ -25,7 +25,6 @@ import java.util.Optional;
 import org.apache.bookkeeper.mledger.util.StatsBuckets;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.pulsar.broker.service.Consumer;
-import org.apache.pulsar.common.policies.data.stats.SubscriptionStatsImpl;
 import org.apache.pulsar.common.policies.data.stats.TopicMetricBean;
 import org.apache.pulsar.compaction.CompactionRecord;
 import org.apache.pulsar.compaction.CompactorMXBean;
@@ -310,17 +309,13 @@ class TopicStats {
             writeSubscriptionMetric(stream, "pulsar_subscription_consumers_count",
                     subsStats.consumersCount, cluster, namespace, topic, sub, splitTopicAndPartitionIndexLabel);
 
-            long filterProcessedMsgCount = subsStats.filterProcessedMsgCount;
-            long filterAcceptedMsgCount = subsStats.filterAcceptedMsgCount;
-            long filterEstimatedBacklog = SubscriptionStatsImpl.computeFilterEstimatedBacklog(
-                                                        msgBacklog, filterProcessedMsgCount, filterAcceptedMsgCount);
             writeSubscriptionMetric(stream, "pulsar_subscription_filter_processed_msg_count",
-                    filterProcessedMsgCount, cluster, namespace, topic, sub,
+                    subsStats.filterProcessedMsgCount, cluster, namespace, topic, sub,
                     splitTopicAndPartitionIndexLabel);
             writeSubscriptionMetric(stream, "pulsar_subscription_filter_accepted_msg_count",
-                    filterAcceptedMsgCount, cluster, namespace, topic, sub, splitTopicAndPartitionIndexLabel);
+                    subsStats.filterAcceptedMsgCount, cluster, namespace, topic, sub, splitTopicAndPartitionIndexLabel);
             writeSubscriptionMetric(stream, "pulsar_subscription_filter_estimated_msg_backlog",
-                    filterEstimatedBacklog, cluster, namespace, topic, sub, splitTopicAndPartitionIndexLabel);
+                    subsStats.filterEstimatedBacklog, cluster, namespace, topic, sub, splitTopicAndPartitionIndexLabel);
             writeSubscriptionMetric(stream, "pulsar_subscription_filter_rejected_msg_count",
                     subsStats.filterRejectedMsgCount, cluster, namespace, topic, sub, splitTopicAndPartitionIndexLabel);
             writeSubscriptionMetric(stream, "pulsar_subscription_filter_rescheduled_msg_count",
