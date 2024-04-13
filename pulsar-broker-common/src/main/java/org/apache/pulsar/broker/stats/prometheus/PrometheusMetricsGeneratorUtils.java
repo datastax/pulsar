@@ -77,7 +77,10 @@ public class PrometheusMetricsGeneratorUtils {
                     }
                 }
                 for (int j = 0; j < sample.labelNames.size(); j++) {
-                    String labelValue = writeEscapedLabelValue(sample.labelValues.get(j));
+                    String labelValue = sample.labelValues.get(j);
+                    if (labelValue != null && labelValue.indexOf('"') > -1) {
+                        labelValue = labelValue.replace("\"", "\\\"");
+                    }
                     if (j > 0) {
                         stream.write(",");
                     }

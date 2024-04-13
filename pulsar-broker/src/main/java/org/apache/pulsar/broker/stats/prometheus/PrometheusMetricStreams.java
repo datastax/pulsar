@@ -41,7 +41,10 @@ public class PrometheusMetricStreams {
         SimpleTextOutputStream stream = initGaugeType(metricName);
         stream.write(metricName).write('{');
         for (int i = 0; i < labelsAndValuesArray.length; i += 2) {
-            String labelValue = PrometheusMetricsGeneratorUtils.writeEscapedLabelValue(labelsAndValuesArray[i + 1]);
+            String labelValue = labelsAndValuesArray[i + 1];
+            if (labelValue != null && labelValue.indexOf('"') > -1) {
+                labelValue = labelValue.replace("\"", "\\\"");
+            }
             stream.write(labelsAndValuesArray[i]).write("=\"").write(labelValue).write('\"');
             if (i + 2 != labelsAndValuesArray.length) {
                 stream.write(',');
