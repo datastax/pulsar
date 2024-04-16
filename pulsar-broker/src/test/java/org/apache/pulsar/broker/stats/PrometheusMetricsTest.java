@@ -2004,7 +2004,7 @@ public class PrometheusMetricsTest extends BrokerTestBase {
         assertEquals(subCountLines.size(), 1);
         assertEquals(subCountLines.get(0),
                 "pulsar_subscription_msg_drop_rate{cluster=\"test\",namespace=\"prop/ns-abc1\","
-                        + "topic=\"persistent://prop/ns-abc1/\\\"mytopic\",subscription=\"s\\\"ub\\\\\"} 0.0");
+                        + "topic=\"persistent://prop/ns-abc1/\\\"mytopic\",subscription=\"s\\\"ub\\\"} 0.0");
     }
 
 }
