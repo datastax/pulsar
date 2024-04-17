@@ -477,8 +477,10 @@ public class PersistentMessageFinderTest extends MockedBookKeeperTestCase {
             ledger.addEntry(createMessageWrittenToLedger("msg" + i, incorrectPublishTimestamp));
         }
         assertEquals(ledger.getLedgersInfoAsList().size(), 2);
+        PersistentTopic topic = mock(PersistentTopic.class);
+        when(topic.getName()).thenReturn("topicname");
         PersistentMessageExpiryMonitor monitor =
-                new PersistentMessageExpiryMonitor("topicname", c1.getName(), c1, null);
+                new PersistentMessageExpiryMonitor(topic, c1.getName(), c1, null);
         AsyncCallbacks.MarkDeleteCallback markDeleteCallback =
                 (AsyncCallbacks.MarkDeleteCallback) spy(
                         FieldUtils.readDeclaredField(monitor, "markDeleteCallback", true));
