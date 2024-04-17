@@ -53,7 +53,6 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -71,8 +70,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.AddEntryCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.CloseCallback;
@@ -1056,15 +1055,14 @@ public class ServerCnxTest {
         BackGroundExecutor backGroundExecutor1 = startBackgroundExecutorForEmbeddedChannel(channel);
         BackGroundExecutor backGroundExecutor2 = startBackgroundExecutorForEmbeddedChannel(channel2.channel);
         setChannelConnected(channel2.serverCnx);
-        Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
-            channel.runPendingTasks();
-            ByteBuf cmdProducer2 = Commands.newProducer(tName, producerId, requestId.incrementAndGet(),
-                    pName, false, metadata, null, epoch.incrementAndGet(), false,
-                    ProducerAccessMode.Shared, Optional.empty(), false);
-            channel2.channel.writeInbound(cmdProducer2);
-            assertTrue(getResponse(channel2.channel, channel2.clientChannelHelper) instanceof CommandProducerSuccess);
-            assertEquals(topicRef.getProducers().size(), 1);
-        });
+
+        ByteBuf cmdProducer2 = Commands.newProducer(tName, producerId, requestId.incrementAndGet(),
+                pName, false, metadata, null, epoch.incrementAndGet(), false,
+                ProducerAccessMode.Shared, Optional.empty(), false);
+        channel2.channel.writeInbound(cmdProducer2);
+        Object response2 = getResponse(channel2.channel, channel2.clientChannelHelper);
+        assertTrue(response2 instanceof CommandProducerSuccess);
+        assertEquals(topicRef.getProducers().size(), 1);
 
         // cleanup.
         channelsStoppedAnswerHealthCheck.clear();
@@ -1175,6 +1173,20 @@ public class ServerCnxTest {
         ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
         ScheduledFuture scheduledFuture = executor.scheduleWithFixedDelay(() -> {
             channel.runPendingTasks();
+        }, 100, 100, TimeUnit.MILLISECONDS);
+        return new BackGroundExecutor(executor, scheduledFuture);
+    }
+
+    /**
+     * Auto answer `Pong` for the `Cmd-Ping`.
+     * Node: This will result in additional threads pop Command from the Command queue, so do not call this
+     * method if the channel needs to accept other Command.
+     */
+    private BackGroundExecutor autoResponseForHeartBeat(EmbeddedChannel channel,
+                                                        ClientChannelHelper clientChannelHelper) {
+        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+        ScheduledFuture scheduledFuture = executor.scheduleWithFixedDelay(() -> {
+            tryPeekResponse(channel, clientChannelHelper);
         }, 100, 100, TimeUnit.MILLISECONDS);
         return new BackGroundExecutor(executor, scheduledFuture);
     }
