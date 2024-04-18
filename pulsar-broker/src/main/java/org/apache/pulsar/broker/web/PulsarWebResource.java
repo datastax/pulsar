@@ -898,10 +898,9 @@ public abstract class PulsarWebResource {
             if (policiesResult.isPresent()) {
                 Policies policies = policiesResult.get();
                 if (!allowDeletedNamespace && policies.deleted) {
-                    String msg = String.format("Namespace %s is deleted", namespace.toString());
+                    String msg = String.format("Namespace %s is marked as deleted", namespace.toString());
                     log.warn(msg);
-                    validationFuture.completeExceptionally(new RestException(Status.NOT_FOUND,
-                            "Namespace is deleted"));
+                    validationFuture.completeExceptionally(new RestException(Status.NOT_FOUND, msg));
                 } else if (policies.replication_clusters.isEmpty()) {
                     String msg = String.format(
                             "Namespace does not have any clusters configured : local_cluster=%s ns=%s",

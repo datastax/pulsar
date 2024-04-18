@@ -77,6 +77,8 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
         return sequencer.sequential(() -> {
             synchronized (ResourceLockImpl.this) {
                 if (state != State.Valid) {
+                    log.error("Cannot update value on lock at {} because it's not in valid state: {}", path, state,
+                            new Exception("invalid lock state " + state + "  at " + path).fillInStackTrace());
                     return CompletableFuture.failedFuture(
                             new IllegalStateException("Lock was not in valid state: " + state));
                 }
@@ -210,12 +212,17 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
      * This method is thread-safe and it will perform multiple re-validation operations in turn.
      */
     synchronized CompletableFuture<Void> silentRevalidateOnce() {
+        if (state == State.Releasing) {
+            log.info("Lock on resource {} is being released. Skip revalidation", path);
+            return CompletableFuture.completedFuture(null);
+        }
         return sequencer.sequential(() -> revalidate(value))
                 .thenRun(() -> log.info("Successfully revalidated the lock on {}", path))
                 .exceptionally(ex -> {
                     synchronized (ResourceLockImpl.this) {
                         Throwable realCause = FutureUtil.unwrapCompletionException(ex);
-                        if (realCause instanceof BadVersionException || realCause instanceof LockBusyException) {
+                        if (realCause instanceof BadVersionException
+                                || realCause instanceof LockBusyException) {
                             log.warn("Failed to revalidate the lock at {}. Marked as expired. {}",
                                     path, realCause.getMessage());
                             state = State.Released;
@@ -237,7 +244,7 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
         // Since the distributed lock has been expired, we don't need to revalidate it.
         if (state != State.Valid && state != State.Init) {
             return CompletableFuture.failedFuture(
-                    new IllegalStateException("Lock was not in valid state: " + state));
+                    new IllegalStateException("Lock for " + path + " was not in valid state: " + state));
         }
         if (log.isDebugEnabled()) {
             log.debug("doRevalidate with newValue={}, version={}", newValue, version);

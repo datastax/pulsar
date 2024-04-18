@@ -315,7 +315,16 @@ public class SystemTopicBasedTopicPoliciesService implements TopicPoliciesServic
             return CompletableFuture.completedFuture(null);
         }
         synchronized (this) {
-            if (readerCaches.get(namespace) != null) {
+            CompletableFuture<SystemTopicClient.Reader<PulsarEvent>> readerCompletableFuture =
+                    readerCaches.get(namespace);
+            boolean readerCachedAndNotFailed = readerCompletableFuture != null
+                    && readerCompletableFuture.isDone()
+                    && !readerCompletableFuture.isCompletedExceptionally();
+            boolean completedExceptionally = readerCompletableFuture != null
+                    && readerCompletableFuture.isCompletedExceptionally();
+            log.info("[{}] addOwnedNamespaceBundleAsync, readerCachedAndNotFailed: {}, completedExceptionally: {}", namespace,
+                    readerCachedAndNotFailed, completedExceptionally);
+            if (readerCachedAndNotFailed) {
                 ownedBundlesCountPerNamespace.get(namespace).incrementAndGet();
                 return CompletableFuture.completedFuture(null);
             } else {

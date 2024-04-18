@@ -159,7 +159,7 @@ public abstract class NamespacesBase extends AdminResource {
                     return CompletableFuture.completedFuture(null);
                 })
                 .thenCompose(__ -> namespaceResources().createPoliciesAsync(namespaceName, policies))
-                .thenAccept(__ -> log.info("[{}] Created namespace {}", clientAppId(), namespaceName));
+                .thenAccept(__ -> log.info("[{}] Created namespace {} with policies {}", clientAppId(), namespaceName, policies));
     }
 
     protected CompletableFuture<List<String>> internalGetListOfTopics(Policies policies,
@@ -215,6 +215,8 @@ public abstract class NamespacesBase extends AdminResource {
     }
     private void internalRetryableDeleteNamespaceAsync0(boolean force, int retryTimes,
                                                         @Nonnull CompletableFuture<Void> callback) {
+        log.info("internalRetryableDeleteNamespaceAsync0: namespace={}, force={}, retryTimes={}",
+                namespaceName, force, retryTimes);
         precheckWhenDeleteNamespace(namespaceName, force)
                 .thenCompose(policies -> {
                     final CompletableFuture<List<String>> topicsFuture;
@@ -267,13 +269,16 @@ public abstract class NamespacesBase extends AdminResource {
                                 }
                                 if (!force) {
                                     if (hasNonSystemTopic) {
-                                        throw new RestException(Status.CONFLICT, "Cannot delete non empty namespace");
+                                        log.info("Namespace {} has non-system topics, force delete is required. User topics: {}, user partitioned topics: {}",
+                                                namespaceName, allUserCreatedTopics, allUserCreatedPartitionTopics);
+                                        throw new RestException(Status.CONFLICT, "Cannot delete non empty namespace " + namespaceName);
                                     }
                                 }
                                 final CompletableFuture<Void> markDeleteFuture;
                                 if (policies != null && policies.deleted) {
                                     markDeleteFuture = CompletableFuture.completedFuture(null);
                                 } else {
+                                    log.info("Marking the namespace {} as deleted", namespaceName);
                                     markDeleteFuture = namespaceResources().setPoliciesAsync(namespaceName, old -> {
                                         old.deleted = true;
                                         return old;
@@ -298,6 +303,8 @@ public abstract class NamespacesBase extends AdminResource {
                 .thenCompose(bundles -> FutureUtil.waitForAll(bundles.getBundles().stream()
                         .map(bundle -> pulsar().getNamespaceService().checkOwnershipPresentAsync(bundle)
                                 .thenCompose(present -> {
+                                    log.info("Delete namespace {} check bundle {} ownership present: {}",
+                                            namespaceName, bundle, present);
                                     // check if the bundle is owned by any broker,
                                     // if not then we do not need to delete the bundle
                                     if (present) {
@@ -309,10 +316,15 @@ public abstract class NamespacesBase extends AdminResource {
                                                     clientAppId(), ex);
                                             return FutureUtil.failedFuture(ex);
                                         }
+                                        log.info("Deleting namespace bundle {}/{} (force: {})",
+                                                namespaceName, bundle.getBundleRange(), force);
                                         return admin.namespaces().deleteNamespaceBundleAsync(namespaceName.toString(),
                                                 bundle.getBundleRange(), force);
+                                    } else {
+                                        log.info("Bundle {}/{} is not owned by any broker, no need to delete",
+                                                namespaceName, bundle);
+                                        return CompletableFuture.completedFuture(null);
                                     }
-                                    return CompletableFuture.completedFuture(null);
                                 })
                         ).collect(Collectors.toList())))
                 .thenCompose(ignore -> internalClearZkSources())
@@ -321,8 +333,11 @@ public abstract class NamespacesBase extends AdminResource {
                         final Throwable rc = FutureUtil.unwrapCompletionException(error);
                         if (rc instanceof MetadataStoreException) {
                             if (rc.getCause() != null && rc.getCause() instanceof KeeperException.NotEmptyException) {
-                                log.info("[{}] There are in-flight topics created during the namespace deletion, "
-                                        + "retry to delete the namespace again.", namespaceName);
+                                KeeperException.NotEmptyException notEmptyException = (KeeperException.NotEmptyException) rc.getCause();
+                                log.warn("[{}] There are in-flight topics created during the namespace deletion or some bundle is still owned, "
+                                        + "retry to delete the namespace again. Path is {}", namespaceName,
+                                        notEmptyException.getPath());
+
                                 final int next = retryTimes - 1;
                                 if (next > 0) {
                                     // async recursive
@@ -330,7 +345,7 @@ public abstract class NamespacesBase extends AdminResource {
                                 } else {
                                     callback.completeExceptionally(
                                             new RestException(Status.CONFLICT, "The broker still have in-flight topics"
-                                                    + " created during namespace deletion, please try again."));
+                                                    + " created during namespace deletion or some bundle is still owned, please try again."));
                                     // drop out recursive
                                 }
                                 return;
@@ -363,6 +378,7 @@ public abstract class NamespacesBase extends AdminResource {
     }
 
     private CompletableFuture<Void> internalDeleteTopicsAsync(Set<String> topicNames) {
+        log.info("internalDeleteTopicsAsync: {}", topicNames);
         if (CollectionUtils.isEmpty(topicNames)) {
             return CompletableFuture.completedFuture(null);
         }
@@ -453,6 +469,7 @@ public abstract class NamespacesBase extends AdminResource {
 
     // clear zk-node resources for deleting namespace
     protected CompletableFuture<Void> internalClearZkSources() {
+        log.info("internalClearZkSources: {}", namespaceName);
         // clear resource of `/namespace/{namespaceName}` for zk-node
         return namespaceResources().deleteNamespaceAsync(namespaceName)
                 .thenCompose(ignore -> namespaceResources().getPartitionedTopicResources()

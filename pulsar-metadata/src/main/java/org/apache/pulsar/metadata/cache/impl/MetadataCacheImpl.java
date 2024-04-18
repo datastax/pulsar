@@ -91,6 +91,7 @@ public class MetadataCacheImpl<T> implements MetadataCache<T>, Consumer<Notifica
                         if (store instanceof AbstractMetadataStore && ((AbstractMetadataStore) store).isConnected()) {
                             return readValueFromStore(key);
                         } else {
+                            log.error("Cannot refresh cache item for key {} because we're not connected to the metadata store", key);
                             // Do not try to refresh the cache item if we know that we're not connected to the
                             // metadata store
                             return CompletableFuture.completedFuture(oldValue);
@@ -216,6 +217,7 @@ public class MetadataCacheImpl<T> implements MetadataCache<T>, Consumer<Notifica
         }
 
         CompletableFuture<Void> future = new CompletableFuture<>();
+        log.info("Creating path {} with value {}", path, value);
         store.put(path, content, Optional.of(-1L))
                 .thenAccept(stat -> {
                     // Make sure we have the value cached before the operation is completed
