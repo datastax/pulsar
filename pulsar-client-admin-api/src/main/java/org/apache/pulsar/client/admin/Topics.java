@@ -1203,7 +1203,7 @@ public interface Topics {
 
 
     /**
-     * Get the internal stats for the topic via streaming.
+     * Get the internal stats for the topic in a streaming fashion.
      * <p/>
      *
      * @param topic
@@ -1251,7 +1251,7 @@ public interface Topics {
     CompletableFuture<PersistentTopicInternalStats> getInternalStatsAsync(String topic, boolean metadata);
 
     /**
-     * Get the internal stats for the topic asynchronously.
+     * Get the internal stats for the topic asynchronously in a streaming fashion.
      *
      * @param topic
      *            topic Name
@@ -1427,7 +1427,7 @@ public interface Topics {
 
 
     /**
-     * Get the stats for the partitioned topic (raw response).
+     * Get the stats for the partitioned topic in a streaming fashion.
      *
      * @param topic
      *            topic name
@@ -1438,7 +1438,7 @@ public interface Topics {
             throws PulsarAdminException;
 
     /**
-     * Get the stats-internal for the partitioned topic asynchronously (raw response).
+     * Get the stats-internal for the partitioned topic asynchronously in a streaming fashion.
      *
      * @param topic
      *            topic Name
