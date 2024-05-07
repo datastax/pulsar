@@ -18,6 +18,7 @@
  */
 package org.apache.pulsar.client.admin;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1200,6 +1201,26 @@ public interface Topics {
      */
     PersistentTopicInternalStats getInternalStats(String topic, boolean metadata) throws PulsarAdminException;
 
+
+    /**
+     * Get the internal stats for the topic via streaming.
+     * <p/>
+     *
+     * @param topic
+     *            topic name
+     * @param metadata
+     *            flag to include ledger metadata
+     * @return the topic statistics
+     *
+     * @throws NotAuthorizedException
+     *             Don't have admin permission
+     * @throws NotFoundException
+     *             Topic does not exist
+     * @throws PulsarAdminException
+     *             Unexpected error
+     */
+    InputStream streamInternalStats(String topic, boolean metadata) throws PulsarAdminException;
+
     /**
      * Get the internal stats for the topic.
      * <p/>
@@ -1228,6 +1249,17 @@ public interface Topics {
      * @return a future that can be used to track when the internal topic statistics are returned
      */
     CompletableFuture<PersistentTopicInternalStats> getInternalStatsAsync(String topic, boolean metadata);
+
+    /**
+     * Get the internal stats for the topic asynchronously.
+     *
+     * @param topic
+     *            topic Name
+     * @param metadata
+     *            flag to include ledger metadata
+     * @return a future that can be used to track when the internal topic statistics are returned
+     */
+    CompletableFuture<InputStream> streamInternalStatsAsync(String topic, boolean metadata);
 
     /**
      * Get the internal stats for the topic asynchronously.
@@ -1402,7 +1434,7 @@ public interface Topics {
      * @return
      * @throws PulsarAdminException
      */
-    String getRawPartitionedInternalStats(String topic)
+    InputStream streamPartitionedInternalStats(String topic)
             throws PulsarAdminException;
 
     /**
@@ -1412,7 +1444,7 @@ public interface Topics {
      *            topic Name
      * @return a future that can be used to track when the partitioned topic statistics are returned
      */
-    CompletableFuture<String> getRawPartitionedInternalStatsAsync(String topic);
+    CompletableFuture<InputStream> streamPartitionedInternalStatsAsync(String topic);
 
     /**
      * Delete a subscription.
