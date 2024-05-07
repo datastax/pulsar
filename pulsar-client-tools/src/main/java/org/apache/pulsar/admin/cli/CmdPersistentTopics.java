@@ -404,11 +404,20 @@ public class CmdPersistentTopics extends CmdBase {
     private class GetPartitionedStatsInternal extends CliCommand {
         @Parameter(description = "persistent://tenant/namespace/topic", required = true)
         private java.util.List<String> params;
+        @Parameter(names = "--raw", description = "Skip parsing the JSON response")
+        private boolean raw = false;
+
 
         @Override
         void run() throws Exception {
             String persistentTopic = validatePersistentTopic(params);
-            print(getPersistentTopics().getPartitionedInternalStats(persistentTopic));
+            // with large topic partitions the JSON response could be very expensive to parse
+            if (raw) {
+                print(getPersistentTopics().getRawPartitionedInternalStats(persistentTopic));
+            } else {
+                print(getPersistentTopics().getPartitionedInternalStats(persistentTopic));
+            }
+
         }
     }
 

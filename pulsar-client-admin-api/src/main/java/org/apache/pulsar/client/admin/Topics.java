@@ -1393,6 +1393,27 @@ public interface Topics {
      */
     CompletableFuture<PartitionedTopicInternalStats> getPartitionedInternalStatsAsync(String topic);
 
+
+    /**
+     * Get the stats for the partitioned topic (raw response).
+     *
+     * @param topic
+     *            topic name
+     * @return
+     * @throws PulsarAdminException
+     */
+    String getRawPartitionedInternalStats(String topic)
+            throws PulsarAdminException;
+
+    /**
+     * Get the stats-internal for the partitioned topic asynchronously (raw response).
+     *
+     * @param topic
+     *            topic Name
+     * @return a future that can be used to track when the partitioned topic statistics are returned
+     */
+    CompletableFuture<String> getRawPartitionedInternalStatsAsync(String topic);
+
     /**
      * Delete a subscription.
      * <p/>

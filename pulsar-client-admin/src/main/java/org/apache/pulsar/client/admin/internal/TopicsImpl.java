@@ -752,6 +752,18 @@ public class TopicsImpl extends BaseResource implements Topics {
     }
 
     @Override
+    public String getRawPartitionedInternalStats(String topic) throws PulsarAdminException {
+        return sync(() -> getRawPartitionedInternalStatsAsync(topic));
+    }
+
+    @Override
+    public CompletableFuture<String> getRawPartitionedInternalStatsAsync(String topic) {
+        TopicName tn = validateTopic(topic);
+        WebTarget path = topicPath(tn, "partitioned-internalStats");
+        return asyncGetRequest(path, new FutureCallback<String>(){});
+    }
+
+    @Override
     public void deleteSubscription(String topic, String subName) throws PulsarAdminException {
         sync(() -> deleteSubscriptionAsync(topic, subName));
     }
