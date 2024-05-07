@@ -141,7 +141,6 @@ public class PulsarAdminTool {
                 .tlsKeyStorePath(tlsKeyStorePath)
                 .tlsKeyStorePassword(tlsKeyStorePassword)
                 .tlsKeyFilePath(tlsKeyFilePath)
-                .readTimeout(2400000, TimeUnit.MILLISECONDS)
                 .tlsCertificateFilePath(tlsCertificateFilePath);
     }
 

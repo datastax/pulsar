@@ -119,7 +119,6 @@ public abstract class CmdBase {
             System.err.println("Error connecting to: " + getAdmin().getServiceUrl());
             return false;
         } catch (PulsarAdminException e) {
-            e.printStackTrace();
             System.err.println(e.getHttpError());
             System.err.println();
             System.err.println("Reason: " + e.getMessage());

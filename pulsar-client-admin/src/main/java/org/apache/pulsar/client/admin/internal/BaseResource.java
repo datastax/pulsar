@@ -339,7 +339,6 @@ public abstract class BaseResource {
 
     protected <T> T sync(Supplier<CompletableFuture<T>> executor) throws PulsarAdminException {
         try {
-            System.out.println("sync with timeout of " + readTimeoutMs);
             return executor.get().get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
            Thread.currentThread().interrupt();

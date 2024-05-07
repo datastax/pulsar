@@ -56,7 +56,7 @@ if [ -n "$PULSAR_MEM" ]; then
   PULSAR_MEM=${PULSAR_MEM_REWRITE}
 fi
 PULSAR_MEM=${PULSAR_MEM:-"-Xmx128m -XX:MaxDirectMemorySize=128m"}
-echo "mem: $PULSAR_MEM"
+
 # Garbage collection options
 PULSAR_GC=${PULSAR_GC:-" -client "}
 

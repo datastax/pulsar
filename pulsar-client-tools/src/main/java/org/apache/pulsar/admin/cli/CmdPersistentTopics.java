@@ -409,7 +409,6 @@ public class CmdPersistentTopics extends CmdBase {
         void run() throws Exception {
             String persistentTopic = validatePersistentTopic(params);
             print(getPersistentTopics().getPartitionedInternalStats(persistentTopic));
-
         }
     }
 
