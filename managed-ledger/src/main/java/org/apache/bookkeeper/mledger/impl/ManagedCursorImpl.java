@@ -34,6 +34,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.protobuf.InvalidProtocolBufferException;
+import io.airlift.compress.MalformedInputException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -3344,6 +3345,9 @@ public class ManagedCursorImpl implements ManagedCursor {
                 }
             } catch (IOException error) {
                 throw new RuntimeException(error);
+            } catch (MalformedInputException notReallyCompressed) {
+                log.info("Data doesn't seem compressed {}, returning as it is", notReallyCompressed + "");
+                return data;
             }
         }
 
