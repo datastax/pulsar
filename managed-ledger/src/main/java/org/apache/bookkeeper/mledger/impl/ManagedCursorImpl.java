@@ -21,7 +21,6 @@ package org.apache.bookkeeper.mledger.impl;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 import static org.apache.bookkeeper.mledger.ManagedLedgerException.getManagedLedgerException;
-import static org.apache.bookkeeper.mledger.impl.LedgerMetadataUtils.METADATA_PROPERTY_CURSOR_COMPRESSION_TYPE;
 import static org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl.DEFAULT_LEDGER_DELETE_BACKOFF_TIME_SEC;
 import static org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl.DEFAULT_LEDGER_DELETE_RETRIES;
 import static org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl.createManagedLedgerException;
@@ -34,13 +33,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.protobuf.InvalidProtocolBufferException;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
-import io.netty.buffer.Unpooled;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.ArrayDeque;
@@ -113,9 +106,6 @@ import org.apache.bookkeeper.mledger.proto.MLDataFormats.MessageRange;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.PositionInfo;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.StringProperty;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.pulsar.common.api.proto.CompressionType;
-import org.apache.pulsar.common.compression.CompressionCodec;
-import org.apache.pulsar.common.compression.CompressionCodecProvider;
 import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.apache.pulsar.common.util.collections.BitSetRecyclable;
@@ -678,7 +668,6 @@ public class ManagedCursorImpl implements ManagedCursor {
         mbean.addReadCursorLedgerSize(data.length);
         PositionInfo positionInfo;
         try {
-            data = decompressDataIfNeeded(data, lh);
             positionInfo = PositionInfo.parseFrom(data);
         } catch (InvalidProtocolBufferException e) {
             callback.operationFailed(new ManagedLedgerException(e));
@@ -3212,7 +3201,7 @@ public class ManagedCursorImpl implements ManagedCursor {
 
         if (numParts == 1) {
             // no need for chunking
-            writeToBookKeeperLastChunk(lh, mdEntry, callback, data, 0, data.length, position);
+            writeToBookKeeperLastChunk(lh, mdEntry, callback, data, data.length, position);
         } else {
             // chunking
             int part = 0;
@@ -3247,7 +3236,7 @@ public class ManagedCursorImpl implements ManagedCursor {
                         log.error("Cannot serialize footer {}", footer);
                         return;
                     }
-                    writeToBookKeeperLastChunk(lh, mdEntry, callback, footerData, 0, footerData.length, position);
+                    writeToBookKeeperLastChunk(lh, mdEntry, callback, footerData, footerData.length, position);
                 }
                 offset += currentLen;
                 part++;
@@ -3258,9 +3247,9 @@ public class ManagedCursorImpl implements ManagedCursor {
     }
 
     private void writeToBookKeeperLastChunk(LedgerHandle lh, MarkDeleteEntry mdEntry,
-                                            VoidCallback callback, byte[] data, int offset,
+                                            VoidCallback callback, byte[] data,
                                             int currentLen, PositionImpl position) {
-        lh.asyncAddEntry(data, offset, currentLen, (rc, lh1, entryId, ctx) -> {
+        lh.asyncAddEntry(data, 0, currentLen, (rc, lh1, entryId, ctx) -> {
             if (rc == BKException.Code.OK) {
                 if (log.isDebugEnabled()) {
                     log.debug("[{}] Updated cursor {} position {} in meta-ledger {}", ledger.getName(), name, position,
@@ -3283,62 +3272,6 @@ public class ManagedCursorImpl implements ManagedCursor {
                 persistPositionToMetaStore(mdEntry, callback);
             }
         }, null);
-    }
-
-    private byte[] compressDataIfNeeded(byte[] data, LedgerHandle lh) {
-        byte[] pulsarCursorInfoCompression =
-                lh.getCustomMetadata().get(METADATA_PROPERTY_CURSOR_COMPRESSION_TYPE);
-        if (pulsarCursorInfoCompression != null) {
-            String pulsarCursorInfoCompressionString = new String(pulsarCursorInfoCompression);
-            CompressionCodec compressionCodec = CompressionCodecProvider.getCompressionCodec(
-                    CompressionType.valueOf(pulsarCursorInfoCompressionString));
-            ByteBuf encode = compressionCodec.encode(Unpooled.wrappedBuffer(data));
-            try {
-                int uncompressedSize = data.length;
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                DataOutputStream dataOutputStream = new DataOutputStream(out);
-                dataOutputStream.writeInt(uncompressedSize);
-                dataOutputStream.write(ByteBufUtil.getBytes(encode));
-                dataOutputStream.flush();
-                byte[] result =  out.toByteArray();
-                int ratio = (int) (result.length * 100.0 / uncompressedSize);
-                log.info("[{}] Cursor {} Compressed data size {} bytes (with {}, original size {} bytes, ratio {}%)",
-                        ledger.getName(), name, result.length, pulsarCursorInfoCompressionString, data.length, ratio);
-                return result;
-            } catch (IOException error) {
-                throw new RuntimeException(error);
-            } finally {
-                encode.release();
-            }
-        } else {
-            return data;
-        }
-    }
-
-    private static byte[] decompressDataIfNeeded(byte[] data, LedgerHandle lh) {
-        byte[] pulsarCursorInfoCompression =
-                lh.getCustomMetadata().get(METADATA_PROPERTY_CURSOR_COMPRESSION_TYPE);
-        if (pulsarCursorInfoCompression != null) {
-            String pulsarCursorInfoCompressionString = new String(pulsarCursorInfoCompression);
-            CompressionCodec compressionCodec = CompressionCodecProvider.getCompressionCodec(
-                    CompressionType.valueOf(pulsarCursorInfoCompressionString));
-            ByteArrayInputStream input = new ByteArrayInputStream(data);
-            DataInputStream dataInputStream = new DataInputStream(input);
-            try {
-                int uncompressedSize = dataInputStream.readInt();
-                byte[] compressedData = dataInputStream.readNBytes(uncompressedSize);
-                ByteBuf decode = compressionCodec.decode(Unpooled.wrappedBuffer(compressedData), uncompressedSize);
-                try {
-                    return ByteBufUtil.getBytes(decode);
-                } finally {
-                    decode.release();
-                }
-            } catch (IOException error) {
-                throw new RuntimeException(error);
-            }
-        } else {
-            return data;
-        }
     }
 
     public boolean periodicRollover() {
