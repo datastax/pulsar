@@ -33,15 +33,16 @@ import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.util.concurrent.RateLimiter;
+import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.compress.MalformedInputException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.ArrayDeque;
@@ -114,6 +115,7 @@ import org.apache.bookkeeper.mledger.proto.MLDataFormats.MessageRange;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.PositionInfo;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.StringProperty;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.pulsar.common.allocator.PulsarByteBufAllocator;
 import org.apache.pulsar.common.api.proto.CompressionType;
 import org.apache.pulsar.common.compression.CompressionCodec;
 import org.apache.pulsar.common.compression.CompressionCodecProvider;
@@ -3193,6 +3195,27 @@ public class ManagedCursorImpl implements ManagedCursor {
         }
     }
 
+    private static ByteBuf toByteArray(PositionInfo pi) {
+        try {
+            int size = pi.getSerializedSize();
+
+            ByteBuf buf = PulsarByteBufAllocator.DEFAULT.buffer(size, size);
+
+            final CodedOutputStream output = CodedOutputStream.newInstance(buf.nioBuffer(buf.writerIndex(), size));
+            pi.writeTo(output);
+            output.checkNoSpaceLeft();
+
+            // Advance writer idx
+            buf.writerIndex(size);
+
+            return buf;
+        } catch (IOException e) {
+            throw new RuntimeException("Serializing "
+                    + pi.getClass().getName()
+                    + " threw an IOException (should never happen).", e);
+        }
+    }
+
     void persistPositionToLedger(final LedgerHandle lh, MarkDeleteEntry mdEntry, final VoidCallback callback) {
         PositionImpl position = mdEntry.newPosition;
         PositionInfo pi = PositionInfo.newBuilder().setLedgerId(position.getLedgerId())
@@ -3208,24 +3231,26 @@ public class ManagedCursorImpl implements ManagedCursor {
         }
 
         requireNonNull(lh);
-        byte[] data = pi.toByteArray();
+        ByteBuf rawData = toByteArray(pi);
 
-        data = compressDataIfNeeded(data, lh);
+        // rawData is released by compressDataIfNeeded if needed
+        ByteBuf data = compressDataIfNeeded(rawData, lh);
 
         int maxSize = 1024 * 1024;
         int offset = 0;
-        int len = data.length;
+        final int len = data.readableBytes();
         int numParts = 1 + (len / maxSize);
 
         if (log.isDebugEnabled()) {
             log.debug("[{}] Cursor {} Appending to ledger={} position={} data size {} bytes, numParts {}",
                     ledger.getName(), name, lh.getId(),
-                    position, data.length, numParts);
+                    position, len, numParts);
         }
 
         if (numParts == 1) {
             // no need for chunking
-            writeToBookKeeperLastChunk(lh, mdEntry, callback, data, data.length, position);
+            // asyncAddEntry will release data ByteBuf
+            writeToBookKeeperLastChunk(lh, mdEntry, callback, data, position, () -> {});
         } else {
             // chunking
             int part = 0;
@@ -3238,17 +3263,18 @@ public class ManagedCursorImpl implements ManagedCursor {
                     log.info("[{}] Cursor {} Appending to ledger={} position={} data size {} bytes, numParts {} "
                                     + "part {} offset {} len {}",
                             ledger.getName(), name, lh.getId(),
-                            position, data.length, numParts, part, offset, currentLen);
+                            position, len, numParts, part, offset, currentLen);
                 }
 
                 // just send the addEntry, BK client guarantees that each entry succeeds only if all
                 // the previous entries succeeded
-                lh.asyncAddEntry(data, offset, currentLen, (rc, lh1, entryId, ctx) -> {
+                // asyncAddEntry takes ownership of the buffer
+                lh.asyncAddEntry(data.retainedSlice(offset, currentLen), (rc, lh1, entryId, ctx) -> {
                 }, null);
 
                 if (isLast) {
                     // last, send a footer with the number of parts
-                    ChunkSequenceFooter footer = new ChunkSequenceFooter(numParts, data.length);
+                    ChunkSequenceFooter footer = new ChunkSequenceFooter(numParts, len);
                     byte[] footerData;
                     try {
                         footerData = ObjectMapperFactory.getMapper()
@@ -3258,20 +3284,23 @@ public class ManagedCursorImpl implements ManagedCursor {
                         log.error("Cannot serialize footer {}", footer);
                         return;
                     }
-                    writeToBookKeeperLastChunk(lh, mdEntry, callback, footerData, footerData.length, position);
+                    // need to explicitly release data ByteBuf
+                    writeToBookKeeperLastChunk(lh, mdEntry, callback,
+                            Unpooled.wrappedBuffer(footerData), position, data::release);
                 }
                 offset += currentLen;
                 part++;
             }
         }
-
-
     }
 
-    private void writeToBookKeeperLastChunk(LedgerHandle lh, MarkDeleteEntry mdEntry,
-                                            VoidCallback callback, byte[] data,
-                                            int currentLen, PositionImpl position) {
-        lh.asyncAddEntry(data, 0, currentLen, (rc, lh1, entryId, ctx) -> {
+    private void writeToBookKeeperLastChunk(LedgerHandle lh,
+                                            MarkDeleteEntry mdEntry,
+                                            VoidCallback callback,
+                                            ByteBuf data,
+                                            PositionImpl position,
+                                            Runnable onFinished) {
+        lh.asyncAddEntry(data, (rc, lh1, entryId, ctx) -> {
             if (rc == BKException.Code.OK) {
                 if (log.isDebugEnabled()) {
                     log.debug("[{}] Updated cursor {} position {} in meta-ledger {}", ledger.getName(), name, position,
@@ -3281,8 +3310,9 @@ public class ManagedCursorImpl implements ManagedCursor {
                 rolloverLedgerIfNeeded(lh1);
 
                 mbean.persistToLedger(true);
-                mbean.addWriteCursorLedgerSize(data.length);
+                mbean.addWriteCursorLedgerSize(data.readableBytes());
                 callback.operationComplete();
+                onFinished.run();
             } else {
                 log.warn("[{}] Error updating cursor {} position {} in meta-ledger {}: {}", ledger.getName(), name,
                         position, lh1.getId(), BKException.getMessage(rc));
@@ -3292,37 +3322,41 @@ public class ManagedCursorImpl implements ManagedCursor {
 
                 // Before giving up, try to persist the position in the metadata store.
                 persistPositionToMetaStore(mdEntry, callback);
+                onFinished.run();
             }
         }, null);
     }
 
-    private byte[] compressDataIfNeeded(byte[] data, LedgerHandle lh) {
+    private ByteBuf compressDataIfNeeded(ByteBuf data, LedgerHandle lh) {
         byte[] pulsarCursorInfoCompression =
                 lh.getCustomMetadata().get(METADATA_PROPERTY_CURSOR_COMPRESSION_TYPE);
-        if (pulsarCursorInfoCompression != null) {
+        if (pulsarCursorInfoCompression == null) {
+            return data;
+        }
+
+        try {
+            int uncompressedSize = data.readableBytes();
             String pulsarCursorInfoCompressionString = new String(pulsarCursorInfoCompression);
             CompressionCodec compressionCodec = CompressionCodecProvider.getCompressionCodec(
                     CompressionType.valueOf(pulsarCursorInfoCompressionString));
-            ByteBuf encode = compressionCodec.encode(Unpooled.wrappedBuffer(data));
-            try {
-                int uncompressedSize = data.length;
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                DataOutputStream dataOutputStream = new DataOutputStream(out);
-                dataOutputStream.writeInt(uncompressedSize);
-                dataOutputStream.write(ByteBufUtil.getBytes(encode));
-                dataOutputStream.flush();
-                byte[] result =  out.toByteArray();
-                int ratio = (int) (result.length * 100.0 / uncompressedSize);
-                log.info("[{}] Cursor {} Compressed data size {} bytes (with {}, original size {} bytes, ratio {}%)",
-                        ledger.getName(), name, result.length, pulsarCursorInfoCompressionString, data.length, ratio);
-                return result;
-            } catch (IOException error) {
-                throw new RuntimeException(error);
-            } finally {
-                encode.release();
-            }
-        } else {
-            return data;
+            ByteBuf encode = compressionCodec.encode(data);
+
+            int compressedSize = encode.readableBytes();
+
+            ByteBuf szBuf = PulsarByteBufAllocator.DEFAULT.buffer(4).writeInt(uncompressedSize);
+
+            CompositeByteBuf result = PulsarByteBufAllocator.DEFAULT.compositeBuffer(2);
+            result.addComponent(szBuf)
+                    .addComponent(encode);
+            result.readerIndex(0)
+                    .writerIndex(4 + compressedSize);
+
+            int ratio = (int) (compressedSize * 100.0 / uncompressedSize);
+            log.info("[{}] Cursor {} Compressed data size {} bytes (with {}, original size {} bytes, ratio {}%)",
+                    ledger.getName(), name, compressedSize, pulsarCursorInfoCompressionString, uncompressedSize, ratio);
+            return result;
+        } finally {
+            data.release();
         }
     }
 
