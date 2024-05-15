@@ -33,7 +33,6 @@ import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.util.concurrent.RateLimiter;
-import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.airlift.compress.MalformedInputException;
 import io.netty.buffer.ByteBuf;
@@ -107,6 +106,7 @@ import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.ScanOutcome;
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl.PositionBound;
 import org.apache.bookkeeper.mledger.impl.MetaStore.MetaStoreCallback;
+import org.apache.bookkeeper.mledger.proto.LightMLDataFormats;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.LongProperty;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.ManagedCursorInfo;
@@ -3082,6 +3082,18 @@ public class ManagedCursorImpl implements ManagedCursor {
     }
 
 
+    private static void addAllProperties(LightMLDataFormats.PositionInfo lpi, Map<String, Long> properties) {
+        if (properties.isEmpty()) {
+            return;
+        }
+
+        properties.forEach((name, value) -> {
+            lpi.addProperty()
+                    .setName(name)
+                    .setValue(value);
+        });
+    }
+
     private static List<LongProperty> buildPropertiesMap(Map<String, Long> properties) {
         if (properties.isEmpty()) {
             return Collections.emptyList();
@@ -3163,6 +3175,43 @@ public class ManagedCursorImpl implements ManagedCursor {
         }
     }
 
+    private void addIndividualDeletedMessageRanges(LightMLDataFormats.PositionInfo lpi) {
+        lock.readLock().lock();
+        try {
+            if (individualDeletedMessages.isEmpty()) {
+                this.individualDeletedMessagesSerializedSize = 0;
+                return;
+            }
+
+            AtomicInteger acksSerializedSize = new AtomicInteger(0);
+            AtomicInteger rangeCount = new AtomicInteger(0);
+
+            individualDeletedMessages.forEachRawRange((lowerKey, lowerValue, upperKey, upperValue) -> {
+                LightMLDataFormats.MessageRange messageRange = lpi.addIndividualDeletedMessage();
+                messageRange.setLowerEndpoint()
+                        .setLedgerId(lowerKey)
+                        .setEntryId(lowerValue);
+                messageRange.setUpperEndpoint()
+                        .setLedgerId(upperKey)
+                        .setEntryId(upperValue);
+
+                acksSerializedSize.addAndGet(messageRange.getSerializedSize());
+
+                return rangeCount.incrementAndGet() <= config.getMaxUnackedRangesToPersist();
+            });
+
+            this.individualDeletedMessagesSerializedSize = acksSerializedSize.get();
+            individualDeletedMessages.resetDirtyKeys();
+            log.info("[{}] [{}] buildIndividualDeletedMessageRanges, numRanges {} "
+                            + "individualDeletedMessagesSerializedSize {} rangeListSize {} "
+                            + "maxUnackedRangesToPersist {}",
+                    ledger.getName(), name, individualDeletedMessages.size(),
+                    individualDeletedMessagesSerializedSize, rangeCount.get(), config.getMaxUnackedRangesToPersist());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     private List<MLDataFormats.BatchedEntryDeletionIndexInfo> buildBatchEntryDeletionIndexInfoList() {
         lock.readLock().lock();
         try {
@@ -3195,35 +3244,50 @@ public class ManagedCursorImpl implements ManagedCursor {
         }
     }
 
-    private static ByteBuf toByteArray(PositionInfo pi) {
+    private void addAllBatchedEntryDeletionIndexInfo(LightMLDataFormats.PositionInfo lpi) {
+        lock.readLock().lock();
         try {
-            int size = pi.getSerializedSize();
+            if (!config.isDeletionAtBatchIndexLevelEnabled() || batchDeletedIndexes.isEmpty()) {
+                return;
+            }
+            Iterator<Map.Entry<PositionImpl, BitSetRecyclable>> iterator = batchDeletedIndexes.entrySet().iterator();
+            int count = 0;
+            while (iterator.hasNext() && count < config.getMaxBatchDeletedIndexToPersist()) {
+                Map.Entry<PositionImpl, BitSetRecyclable> entry = iterator.next();
 
-            ByteBuf buf = PulsarByteBufAllocator.DEFAULT.buffer(size, size);
+                LightMLDataFormats.BatchedEntryDeletionIndexInfo batchInfo = lpi.addBatchedEntryDeletionIndexInfo();
+                batchInfo.setPosition()
+                        .setLedgerId(entry.getKey().getLedgerId())
+                        .setEntryId(entry.getKey().getEntryId());
 
-            final CodedOutputStream output = CodedOutputStream.newInstance(buf.nioBuffer(buf.writerIndex(), size));
-            pi.writeTo(output);
-            output.checkNoSpaceLeft();
-
-            // Advance writer idx
-            buf.writerIndex(size);
-
-            return buf;
-        } catch (IOException e) {
-            throw new RuntimeException("Serializing "
-                    + pi.getClass().getName()
-                    + " threw an IOException (should never happen).", e);
+                long[] array = entry.getValue().toLongArray();
+                List<Long> deleteSet = new ArrayList<>(array.length);
+                for (long l : array) {
+                    batchInfo.addDeleteSet(l);
+                }
+                count++;
+            }
+        } finally {
+            lock.readLock().unlock();
         }
+    }
+
+    private static ByteBuf toByteBuf(LightMLDataFormats.PositionInfo pi) {
+        int size = pi.getSerializedSize();
+        ByteBuf buf = PulsarByteBufAllocator.DEFAULT.buffer(size, size);
+        pi.writeTo(buf);
+        return buf;
     }
 
     void persistPositionToLedger(final LedgerHandle lh, MarkDeleteEntry mdEntry, final VoidCallback callback) {
         PositionImpl position = mdEntry.newPosition;
-        PositionInfo pi = PositionInfo.newBuilder().setLedgerId(position.getLedgerId())
-                .setEntryId(position.getEntryId())
-                .addAllIndividualDeletedMessages(buildIndividualDeletedMessageRanges())
-                .addAllBatchedEntryDeletionIndexInfo(buildBatchEntryDeletionIndexInfoList())
-                .addAllProperties(buildPropertiesMap(mdEntry.properties)).build();
 
+        LightMLDataFormats.PositionInfo pi = new LightMLDataFormats.PositionInfo()
+                .setLedgerId(position.getLedgerId())
+                .setEntryId(position.getEntryId());
+        addIndividualDeletedMessageRanges(pi);
+        addAllBatchedEntryDeletionIndexInfo(pi);
+        addAllProperties(pi, mdEntry.properties);
 
         if (log.isDebugEnabled()) {
             log.debug("[{}] Cursor {} Appending to ledger={} position={}", ledger.getName(), name, lh.getId(),
@@ -3231,7 +3295,7 @@ public class ManagedCursorImpl implements ManagedCursor {
         }
 
         requireNonNull(lh);
-        ByteBuf rawData = toByteArray(pi);
+        ByteBuf rawData = toByteBuf(pi);
 
         // rawData is released by compressDataIfNeeded if needed
         ByteBuf data = compressDataIfNeeded(rawData, lh);
