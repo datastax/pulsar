@@ -39,6 +39,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.concurrent.FastThreadLocal;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -131,6 +132,14 @@ import org.slf4j.LoggerFactory;
 
 @SuppressWarnings("checkstyle:javadoctype")
 public class ManagedCursorImpl implements ManagedCursor {
+
+    private static final FastThreadLocal<LightMLDataFormats.PositionInfo> piThreadLocal = new FastThreadLocal<>() {
+        @Override
+        protected LightMLDataFormats.PositionInfo initialValue() {
+            return new LightMLDataFormats.PositionInfo();
+        }
+    };
+
     private static final Comparator<Entry> ENTRY_COMPARATOR = (e1, e2) -> {
         if (e1.getLedgerId() != e2.getLedgerId()) {
             return e1.getLedgerId() < e2.getLedgerId() ? -1 : 1;
@@ -3282,8 +3291,10 @@ public class ManagedCursorImpl implements ManagedCursor {
     void persistPositionToLedger(final LedgerHandle lh, MarkDeleteEntry mdEntry, final VoidCallback callback) {
         PositionImpl position = mdEntry.newPosition;
 
-        LightMLDataFormats.PositionInfo pi = new LightMLDataFormats.PositionInfo()
-                .setLedgerId(position.getLedgerId())
+        LightMLDataFormats.PositionInfo pi = piThreadLocal.get();
+        pi.clear();
+
+        pi.setLedgerId(position.getLedgerId())
                 .setEntryId(position.getEntryId());
         addIndividualDeletedMessageRanges(pi);
         addAllBatchedEntryDeletionIndexInfo(pi);
