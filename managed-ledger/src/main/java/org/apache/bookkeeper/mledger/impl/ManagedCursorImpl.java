@@ -3216,9 +3216,12 @@ public class ManagedCursorImpl implements ManagedCursor {
         int offset = 0;
         int len = data.length;
         int numParts = 1 + (len / maxSize);
-        log.info("[{}] Cursor {} Appending to ledger={} position={} data size {} bytes, numParts {}",
-                ledger.getName(), name, lh.getId(),
-                position, data.length, numParts);
+
+        if (log.isDebugEnabled()) {
+            log.debug("[{}] Cursor {} Appending to ledger={} position={} data size {} bytes, numParts {}",
+                    ledger.getName(), name, lh.getId(),
+                    position, data.length, numParts);
+        }
 
         if (numParts == 1) {
             // no need for chunking
@@ -3231,24 +3234,22 @@ public class ManagedCursorImpl implements ManagedCursor {
                 int currentLen = Math.min(maxSize, remaining);
                 boolean isLast = part == numParts - 1;
 
-                log.info("[{}] Cursor {} Appending to ledger={} position={} data size {} bytes, numParts {} "
-                                + "part {} offset {} len {}",
-                        ledger.getName(), name, lh.getId(),
-                        position, data.length, numParts, part, offset, currentLen);
+                if (log.isDebugEnabled()) {
+                    log.info("[{}] Cursor {} Appending to ledger={} position={} data size {} bytes, numParts {} "
+                                    + "part {} offset {} len {}",
+                            ledger.getName(), name, lh.getId(),
+                            position, data.length, numParts, part, offset, currentLen);
+                }
 
-                    // just send the addEntry, BK client guarantees that each entry succeeds only if all
-                    // the previous entries succeeded
-                    lh.asyncAddEntry(data, offset, currentLen, (rc, lh1, entryId, ctx) -> {
-                        log.info("written entry {} len {}", entryId, currentLen);
-                    }, null);
+                // just send the addEntry, BK client guarantees that each entry succeeds only if all
+                // the previous entries succeeded
+                lh.asyncAddEntry(data, offset, currentLen, (rc, lh1, entryId, ctx) -> {
+                }, null);
 
                 if (isLast) {
                     // last, send a footer with the number of parts
                     ChunkSequenceFooter footer = new ChunkSequenceFooter(numParts, data.length);
-                    log.info("[{}] Cursor {} Appending to ledger={} position={} Footer {}",
-                            ledger.getName(), name, lh.getId(),
-                            position, footer);
-                    byte[] footerData = new byte[0];
+                    byte[] footerData;
                     try {
                         footerData = ObjectMapperFactory.getMapper()
                                 .getObjectMapper().writeValueAsBytes(footer);
