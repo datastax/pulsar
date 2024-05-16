@@ -19,11 +19,16 @@
 package org.apache.bookkeeper.mledger.impl;
 
 import static org.testng.Assert.*;
+
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import java.util.Map;
 import java.util.List;
+
+import org.apache.bookkeeper.mledger.proto.LightMLDataFormats;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats;
+import org.apache.pulsar.common.allocator.PulsarByteBufAllocator;
 import org.testng.annotations.Test;
 
 public class PositionInfoUtilsTest {
@@ -88,4 +93,76 @@ public class PositionInfoUtilsTest {
         assertEquals(0, positionInfoParsed.getBatchedEntryDeletionIndexInfoCount());
         result.release();
     }
+
+    @Test
+    public void testSerializeDeserialize2() throws Exception {
+        PositionImpl position = new PositionImpl(1, 2);
+        ManagedCursorImpl.MarkDeleteEntry entry = new ManagedCursorImpl.MarkDeleteEntry(position,
+                Map.of("foo", 1L), null, null);
+
+        // passes with 31
+        // fails with >= 32
+        final int numRanges = 32;
+        ByteBuf result = PositionInfoUtils.serializePositionInfo(entry, position, (scanner) -> {
+            for (int i = 0; i < numRanges; i++) {
+                scanner.acceptRange(i*4 + 1, i*4 + 2, i*4 + 3, i*4 + 4);
+            }
+        }, (scanner) -> {
+            long[] array = {7L, 8L};
+            for (int i = 0; i < numRanges; i++) {
+                scanner.acceptRange(i*2 + 1, i*2 + 2, array);
+            }
+        }, 1024);
+
+        // deserialize PIUtils -> lightproto
+        final int idx = result.readerIndex();
+        LightMLDataFormats.PositionInfo lighPositionInfoParsed = new LightMLDataFormats.PositionInfo();
+        lighPositionInfoParsed.parseFrom(result, result.readableBytes());
+        result.readerIndex(idx);
+
+        // serialize lightproto
+        int serializedSz = lighPositionInfoParsed.getSerializedSize();
+        ByteBuf lightResult = PulsarByteBufAllocator.DEFAULT.buffer(serializedSz);
+        lighPositionInfoParsed.writeTo(lightResult);
+
+        // deserialize lightproto -> protobuf
+        parseProtobufAndValidate(ByteBufUtil.getBytes(lightResult), numRanges);
+
+        // deserialize PIUtils -> protobuf
+        parseProtobufAndValidate(ByteBufUtil.getBytes(result), numRanges);
+
+        result.release();
+        lightResult.release();
+    }
+
+    private static void parseProtobufAndValidate(byte[] data, int numRanges) throws InvalidProtocolBufferException {
+        MLDataFormats.PositionInfo positionInfoParsed = MLDataFormats.PositionInfo.parseFrom(data);
+
+        assertEquals(1, positionInfoParsed.getLedgerId());
+        assertEquals(2, positionInfoParsed.getEntryId());
+
+        assertEquals(1, positionInfoParsed.getPropertiesCount());
+        assertEquals("foo", positionInfoParsed.getProperties(0).getName());
+        assertEquals(1, positionInfoParsed.getProperties(0).getValue());
+
+        assertEquals(numRanges, positionInfoParsed.getIndividualDeletedMessagesCount());
+        int curr = 0;
+        for (int i = 0; i < numRanges; i++) {
+            assertEquals(i*4 + 1, positionInfoParsed.getIndividualDeletedMessages(curr).getLowerEndpoint().getLedgerId());
+            assertEquals(i*4 + 2, positionInfoParsed.getIndividualDeletedMessages(curr).getLowerEndpoint().getEntryId());
+            assertEquals(i*4 + 3, positionInfoParsed.getIndividualDeletedMessages(curr).getUpperEndpoint().getLedgerId());
+            assertEquals(i*4 + 4, positionInfoParsed.getIndividualDeletedMessages(curr).getUpperEndpoint().getEntryId());
+            curr++;
+        }
+
+        assertEquals(numRanges, positionInfoParsed.getBatchedEntryDeletionIndexInfoCount());
+        curr = 0;
+        for (int i = 0; i < numRanges; i++) {
+            assertEquals(i*2 + 1, positionInfoParsed.getBatchedEntryDeletionIndexInfo(curr).getPosition().getLedgerId());
+            assertEquals(i*2 + 2, positionInfoParsed.getBatchedEntryDeletionIndexInfo(curr).getPosition().getEntryId());
+            assertEquals(List.of(7L, 8L), positionInfoParsed.getBatchedEntryDeletionIndexInfo(curr).getDeleteSetList());
+            curr++;
+        }
+    }
+
 }
