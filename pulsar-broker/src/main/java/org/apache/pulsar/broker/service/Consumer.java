@@ -560,11 +560,11 @@ public class Consumer {
         // we use acknowledgeMessageAsync because we don't want to perform the
         // flush of the cursor (that may take much time in case of a long list of individuallyDeletedMessages)
         // in the Netty eventloop thread
-        long _totalAckCount = totalAckCount;
-        subscription.acknowledgeMessageAsync(positionsAcked, AckType.Individual, properties)
-                .thenCompose( ___ -> {
+        long totalCount = totalAckCount;
+        return subscription.acknowledgeMessageAsync(positionsAcked, AckType.Individual, properties)
+                .thenCompose(___ -> {
             CompletableFuture<Long> completableFuture = new CompletableFuture<>();
-            completableFuture.complete(_totalAckCount);
+            completableFuture.complete(totalCount);
             if (isTransactionEnabled() && Subscription.isIndividualAckMode(subType)) {
                 completableFuture.whenComplete((v, e) -> positionsAcked.forEach(position -> {
                     //check if the position can remove from the consumer pending acks.
@@ -578,7 +578,7 @@ public class Consumer {
                 }));
             }
             return completableFuture;
-        }
+        });
     }
 
 

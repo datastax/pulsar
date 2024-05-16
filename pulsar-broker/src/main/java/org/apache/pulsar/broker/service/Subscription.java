@@ -50,7 +50,8 @@ public interface Subscription extends MessageExpirer {
 
     void acknowledgeMessage(List<Position> positions, AckType ackType, Map<String, Long> properties);
 
-    default CompletableFuture<Void> acknowledgeMessageAsync(List<Position> positions, AckType ackType, Map<String, Long> properties) {
+    default CompletableFuture<Void> acknowledgeMessageAsync(List<Position> positions,
+                                                            AckType ackType, Map<String, Long> properties) {
         acknowledgeMessage(positions, ackType, properties);
         return CompletableFuture.completedFuture(null);
     }

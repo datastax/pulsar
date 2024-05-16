@@ -365,12 +365,12 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
     }
 
     @Override
-    public CompletableFuture<Void> acknowledgeMessageAsync(List<Position> positions, AckType ackType, Map<String, Long> properties) {
-        ManagedLedgerImpl impl = (ManagedLedgerImpl) cursor.getManagedLedger();
+    public CompletableFuture<Void> acknowledgeMessageAsync(List<Position> positions,
+                                                           AckType ackType, Map<String, Long> properties) {
         // which is the best thread ?
         return CompletableFuture.runAsync(() -> {
                 acknowledgeMessage(positions, ackType, properties);
-                }, impl.getExecutor());
+                }, topic.getBrokerService().pulsar().getExecutor());
     }
 
     @Override
