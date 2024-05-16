@@ -163,6 +163,7 @@ public class ManagedCursorImpl implements ManagedCursor {
     private final BookKeeper.DigestType digestType;
 
     protected volatile PositionImpl markDeletePosition;
+    private int lastSerializedSize;
 
     // this position is have persistent mark delete position
     protected volatile PositionImpl persistentMarkDeletePosition;
@@ -255,7 +256,7 @@ public class ManagedCursorImpl implements ManagedCursor {
     // active state cache in ManagedCursor. It should be in sync with the state in activeCursors in ManagedLedger.
     private volatile boolean isActive = false;
 
-    class MarkDeleteEntry {
+    static class MarkDeleteEntry {
         final PositionImpl newPosition;
         final MarkDeleteCallback callback;
         final Object ctx;
@@ -700,8 +701,14 @@ public class ManagedCursorImpl implements ManagedCursor {
         try {
             positionInfo = PositionInfo.parseFrom(data);
         } catch (InvalidProtocolBufferException e) {
-            callback.operationFailed(new ManagedLedgerException(e));
-            return;
+            log.error("[{}] Failed to parse position info from ledger {} for cursor {}: {}", ledger.getName(),
+                    lh.getId(), name, e);
+            // Rewind to oldest entry available
+            positionInfo = PositionInfo
+                    .newBuilder()
+                    .setLedgerId(-1)
+                    .setEntryId(-1)
+                    .build();
         }
 
         Map<String, Long> recoveredProperties = Collections.emptyMap();
@@ -3288,8 +3295,10 @@ public class ManagedCursorImpl implements ManagedCursor {
 
         requireNonNull(lh);
         ByteBuf rawData = PositionInfoUtils.serializePositionInfo(mdEntry, position,
-                this::scanIndividualDeletedMessageRanges, this::buildBatchEntryDeletionIndexInfoList);
+                this::scanIndividualDeletedMessageRanges, this::buildBatchEntryDeletionIndexInfoList,
+                lastSerializedSize);
         long endSer = System.nanoTime();
+        this.lastSerializedSize = rawData.readableBytes();
 
         // rawData is released by compressDataIfNeeded if needed
         ByteBuf data = compressDataIfNeeded(rawData, lh);

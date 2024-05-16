@@ -42,8 +42,10 @@ final class PositionInfoUtils {
 
     static ByteBuf serializePositionInfo(ManagedCursorImpl.MarkDeleteEntry mdEntry, PositionImpl position,
                                          Consumer<IndividuallyDeletedMessagesRangeConsumer> rangeScanner,
-                                         Consumer<BatchedEntryDeletionIndexInfoConsumer> batchDeletedIndexesScanner) {
-        ByteBuf _b = PulsarByteBufAllocator.DEFAULT.buffer(64 * 1024);
+                                         Consumer<BatchedEntryDeletionIndexInfoConsumer> batchDeletedIndexesScanner,
+                                         int lastSerializedSize) {
+        int size = Math.max(lastSerializedSize, 64 * 1024);
+        ByteBuf _b = PulsarByteBufAllocator.DEFAULT.buffer(size);
 
         int _writeIdx = _b.writerIndex();
         LightProtoCodec.writeVarInt(_b, PositionInfo._LEDGER_ID_TAG);
