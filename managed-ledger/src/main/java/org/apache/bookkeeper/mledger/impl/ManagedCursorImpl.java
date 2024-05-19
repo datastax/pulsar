@@ -2779,6 +2779,8 @@ public class ManagedCursorImpl implements ManagedCursor {
                     new CursorAlreadyClosedException(name + " cursor already closed"))));
             return;
         }
+        log.info("[{}][{}] Persisting cursor metadata into metadata store (persistIndividualDeletedMessageRanges: {})",
+                ledger.getName(), name, persistIndividualDeletedMessageRanges);
 
         final Stat lastCursorLedgerStat = cursorLedgerStat;
 
@@ -2793,7 +2795,7 @@ public class ManagedCursorImpl implements ManagedCursor {
         info.addAllProperties(buildPropertiesMap(properties));
         info.addAllCursorProperties(buildStringPropertiesMap(cursorProperties));
         if (persistIndividualDeletedMessageRanges) {
-            info.addAllIndividualDeletedMessages(buildIndividualDeletedMessageRanges());
+            info.addAllIndividualDeletedMessages(buildIndividualDeletedMessageRanges(true));
             if (config.isDeletionAtBatchIndexLevelEnabled()) {
                 info.addAllBatchedEntryDeletionIndexInfo(buildBatchEntryDeletionIndexInfoList());
             }
@@ -3130,7 +3132,7 @@ public class ManagedCursorImpl implements ManagedCursor {
         return stringProperties;
     }
 
-    private List<MLDataFormats.MessageRange> buildIndividualDeletedMessageRanges() {
+    private List<MLDataFormats.MessageRange> buildIndividualDeletedMessageRanges(boolean forMetastore) {
         lock.readLock().lock();
         try {
             if (individualDeletedMessages.isEmpty()) {
@@ -3163,19 +3165,28 @@ public class ManagedCursorImpl implements ManagedCursor {
                         .setUpperEndpoint(upperPosition)
                         .build();
 
-                acksSerializedSize.addAndGet(messageRange.getSerializedSize());
+                int currentSize = acksSerializedSize.addAndGet(messageRange.getSerializedSize());
                 rangeList.add(messageRange);
+
+                if (forMetastore && currentSize > (1024 * 1024 - 10 * 1024)) {
+                    log.warn("[{}] [{}] buildIndividualDeletedMessageRanges, "
+                                    + "rangeListSize {} "
+                                    + "maxUnackedRangesToPersist {}, "
+                                    + "reached {} bytes that is too big for the metastore",
+                            ledger.getName(), name,
+                            rangeList.size(),
+                            config.getMaxUnackedRangesToPersist(), currentSize);
+                    return false;
+                }
 
                 return rangeList.size() <= config.getMaxUnackedRangesToPersist();
             });
 
             this.individualDeletedMessagesSerializedSize = acksSerializedSize.get();
             individualDeletedMessages.resetDirtyKeys();
-            log.info("[{}] [{}] buildIndividualDeletedMessageRanges, numRanges {} "
-                            + "individualDeletedMessagesSerializedSize {} rangeListSize {} "
+            log.info("[{}] [{}] buildIndividualDeletedMessageRanges, rangeListSize {} "
                             + "maxUnackedRangesToPersist {}",
-                    ledger.getName(), name, individualDeletedMessages.size(),
-                    individualDeletedMessagesSerializedSize, rangeList.size(),
+                    ledger.getName(), name, rangeList.size(),
                     config.getMaxUnackedRangesToPersist());
 
             return rangeList;
@@ -3205,11 +3216,11 @@ public class ManagedCursorImpl implements ManagedCursor {
 
             this.individualDeletedMessagesSerializedSize = acksSerializedSize.get();
             individualDeletedMessages.resetDirtyKeys();
-            log.info("[{}] [{}] scanIndividualDeletedMessageRanges, numRanges {} "
-                            + "individualDeletedMessagesSerializedSize {} rangeListSize {} "
+            log.info("[{}] [{}] scanIndividualDeletedMessageRanges, "
+                            + "rangeListSize {} "
                             + "maxUnackedRangesToPersist {}",
-                    ledger.getName(), name, individualDeletedMessages.size(),
-                    individualDeletedMessagesSerializedSize, rangeCount.get(),
+                    ledger.getName(), name,
+                    rangeCount.get(),
                     config.getMaxUnackedRangesToPersist());
         } finally {
             lock.readLock().unlock();
@@ -3480,6 +3491,7 @@ public class ManagedCursorImpl implements ManagedCursor {
     }
 
     void persistPositionToMetaStore(MarkDeleteEntry mdEntry, final VoidCallback callback) {
+        log.info("[{}][{}] Persisting cursor metadata into metadata store", ledger.getName(), name);
         final PositionImpl newPosition = mdEntry.newPosition;
         STATE_UPDATER.compareAndSet(ManagedCursorImpl.this, State.Open, State.NoLedger);
         mbean.persistToLedger(false);
