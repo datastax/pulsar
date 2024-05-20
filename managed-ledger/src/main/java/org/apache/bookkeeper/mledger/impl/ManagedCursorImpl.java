@@ -3373,27 +3373,30 @@ public class ManagedCursorImpl implements ManagedCursor {
                                             PositionImpl position,
                                             Runnable onFinished) {
         lh.asyncAddEntry(data, (rc, lh1, entryId, ctx) -> {
-            if (rc == BKException.Code.OK) {
-                if (log.isDebugEnabled()) {
-                    log.debug("[{}] Updated cursor {} position {} in meta-ledger {}", ledger.getName(), name, position,
-                            lh1.getId());
+            try {
+                if (rc == BKException.Code.OK) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("[{}] Updated cursor {} position {} in meta-ledger {}", ledger.getName(), name,
+                                position,
+                                lh1.getId());
+                    }
+
+                    rolloverLedgerIfNeeded(lh1);
+
+                    mbean.persistToLedger(true);
+                    mbean.addWriteCursorLedgerSize(data.readableBytes());
+                    callback.operationComplete();
+                } else {
+                    log.warn("[{}] Error updating cursor {} position {} in meta-ledger {}: {}", ledger.getName(), name,
+                            position, lh1.getId(), BKException.getMessage(rc));
+                    // If we've had a write error, the ledger will be automatically closed, we need to create a new one,
+                    // in the meantime the mark-delete will be queued.
+                    STATE_UPDATER.compareAndSet(ManagedCursorImpl.this, State.Open, State.NoLedger);
+
+                    // Before giving up, try to persist the position in the metadata store.
+                    persistPositionToMetaStore(mdEntry, callback);
                 }
-
-                rolloverLedgerIfNeeded(lh1);
-
-                mbean.persistToLedger(true);
-                mbean.addWriteCursorLedgerSize(data.readableBytes());
-                callback.operationComplete();
-                onFinished.run();
-            } else {
-                log.warn("[{}] Error updating cursor {} position {} in meta-ledger {}: {}", ledger.getName(), name,
-                        position, lh1.getId(), BKException.getMessage(rc));
-                // If we've had a write error, the ledger will be automatically closed, we need to create a new one,
-                // in the meantime the mark-delete will be queued.
-                STATE_UPDATER.compareAndSet(ManagedCursorImpl.this, State.Open, State.NoLedger);
-
-                // Before giving up, try to persist the position in the metadata store.
-                persistPositionToMetaStore(mdEntry, callback);
+            } finally {
                 onFinished.run();
             }
         }, null);
