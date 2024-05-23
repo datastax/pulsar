@@ -19,14 +19,13 @@
 package org.apache.pulsar.io.debezium.oracle;
 
 import io.debezium.relational.HistorizedRelationalDatabaseConnectorConfig;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.io.core.SourceContext;
 import org.apache.pulsar.io.kafka.connect.KafkaConnectSource;
 import org.apache.pulsar.io.kafka.connect.PulsarKafkaWorkerConfig;
-
-import java.util.Map;
 
 @Slf4j
 public abstract class DebeziumSource extends KafkaConnectSource {
