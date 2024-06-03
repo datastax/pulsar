@@ -100,7 +100,7 @@ public class EntryFilterProvider implements AutoCloseable {
         return loadEntryFilters(entryFilterList);
     }
 
-    private List<EntryFilter> loadEntryFilters(Collection<String> entryFilterNames)
+    public List<EntryFilter> loadEntryFilters(Collection<String> entryFilterNames)
             throws IOException {
         ImmutableMap.Builder<String, EntryFilter> builder = ImmutableMap.builder();
         for (String filterName : entryFilterNames) {
@@ -148,6 +148,14 @@ public class EntryFilterProvider implements AutoCloseable {
                     EntryFilterMetaData metadata = new EntryFilterMetaData();
                     metadata.setDefinition(def);
                     metadata.setArchivePath(archive);
+
+                    if (entryFilterDefinitions.containsKey(def.getName())) {
+                        Path oldPath = entryFilterDefinitions.get(def.getName()).getArchivePath();
+                        log.error("Entry filter with name `{}` already loaded from {}, replacing with {}",
+                                def.getName(), oldPath, archive);
+                        cachedClassLoaders.remove(classLoaderKey(oldPath)).close();
+                        entryFilterDefinitions.remove(def.getName());
+                    }
 
                     entryFilterDefinitions.put(def.getName(), metadata);
                 } catch (Throwable t) {
@@ -217,6 +225,7 @@ public class EntryFilterProvider implements AutoCloseable {
         return cachedClassLoaders
                 .computeIfAbsent(absolutePath, narFilePath -> {
                     try {
+                        log.info("Loading NAR from {}", archivePath);
                         final File narFile = archivePath.toAbsolutePath().toFile();
                         return NarClassLoaderBuilder.builder()
                                 .narFile(narFile)
