@@ -55,7 +55,6 @@ public class ProxyAuthorizationTest extends MockedPulsarServiceBaseTest {
     @Override
     protected void setup() throws Exception {
         conf.setClusterName(configClusterName);
-        conf.setForceDeleteNamespaceAllowed(true);
         internalSetup();
 
         WebSocketProxyConfiguration config = new WebSocketProxyConfiguration();
@@ -100,9 +99,8 @@ public class ProxyAuthorizationTest extends MockedPulsarServiceBaseTest {
         assertTrue(auth.canLookup(TopicName.get("persistent://p1/c1/ns1/ds1"), "my-role", null));
         assertTrue(auth.canProduce(TopicName.get("persistent://p1/c1/ns1/ds1"), "my-role", null));
 
-        String topic = "persistent://p1/c1/ns1/ds2";
-        admin.topics().createNonPartitionedTopic(topic);
-        admin.topics().grantPermission(topic, "other-role", EnumSet.of(AuthAction.consume));
+        admin.topics().grantPermission("persistent://p1/c1/ns1/ds2", "other-role",
+                EnumSet.of(AuthAction.consume));
         waitForChange();
 
         assertTrue(auth.canLookup(TopicName.get("persistent://p1/c1/ns1/ds2"), "other-role", null));
@@ -129,7 +127,7 @@ public class ProxyAuthorizationTest extends MockedPulsarServiceBaseTest {
         assertTrue(auth.canProduce(TopicName.get("persistent://p1/c1/ns1/ds1"), "my-role", null));
         assertTrue(auth.canConsume(TopicName.get("persistent://p1/c1/ns1/ds1"), "my-role", null, null));
 
-        admin.namespaces().deleteNamespace("p1/c1/ns1", true);
+        admin.namespaces().deleteNamespace("p1/c1/ns1");
         admin.tenants().deleteTenant("p1");
         admin.clusters().deleteCluster("c1");
     }
