@@ -273,6 +273,7 @@ public class PulsarService implements AutoCloseable, ShutdownService {
     private TransactionPendingAckStoreProvider transactionPendingAckStoreProvider;
     private final ExecutorProvider transactionExecutorProvider;
     private String brokerId;
+    private final CompletableFuture<Void> readyForIncomingRequestsFuture = new CompletableFuture<>();
 
     public enum State {
         Init, Started, Closing, Closed
@@ -901,6 +902,9 @@ public class PulsarService implements AutoCloseable, ShutdownService {
 
             this.metricsGenerator = new MetricsGenerator(this);
 
+            // the broker is ready to accept incoming requests by Pulsar binary protocol and http/https
+            readyForIncomingRequestsFuture.complete(null);
+
             // Initialize the message protocol handlers.
             // start the protocol handlers only after the broker is ready,
             // so that the protocol handlers can access broker service properly.
@@ -949,10 +953,20 @@ public class PulsarService implements AutoCloseable, ShutdownService {
             state = State.Started;
         } catch (Exception e) {
             LOG.error("Failed to start Pulsar service: {}", e.getMessage(), e);
-            throw new PulsarServerException(e);
+            PulsarServerException startException = new PulsarServerException(e);
+            readyForIncomingRequestsFuture.completeExceptionally(startException);
+            throw startException;
         } finally {
             mutex.unlock();
         }
+    }
+
+    public void runWhenReadyForIncomingRequests(Runnable runnable) {
+        readyForIncomingRequestsFuture.thenRun(runnable);
+    }
+
+    public void waitUntilReadyForIncomingRequests() throws ExecutionException, InterruptedException {
+        readyForIncomingRequestsFuture.get();
     }
 
     protected BrokerInterceptor newBrokerInterceptor() throws IOException {
@@ -1938,6 +1952,11 @@ public class PulsarService implements AutoCloseable, ShutdownService {
     @VisibleForTesting
     protected BrokerService newBrokerService(PulsarService pulsar) throws Exception {
         return new BrokerService(pulsar, ioEventLoopGroup);
+    }
+
+    @VisibleForTesting
+    public void setTransactionExecutorProvider(TransactionBufferProvider transactionBufferProvider) {
+        this.transactionBufferProvider = transactionBufferProvider;
     }
 
     public void initConfigMetadataSynchronizerIfNeeded() {

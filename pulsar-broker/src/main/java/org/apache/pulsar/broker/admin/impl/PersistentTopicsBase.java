@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -469,8 +468,8 @@ public class PersistentTopicsBase extends AdminResource {
                                 Set<String> replicationClusters = policies.get().replication_clusters;
                                 TopicPolicies topicPolicies =
                                         pulsarService.getTopicPoliciesService().getTopicPoliciesIfExists(topicName);
-                                if (topicPolicies != null) {
-                                    replicationClusters = new HashSet<>(topicPolicies.getReplicationClusters());
+                                if (topicPolicies != null && topicPolicies.getReplicationClusters() != null) {
+                                    replicationClusters = topicPolicies.getReplicationClustersSet();
                                 }
                                 // Do check replicated clusters.
                                 if (replicationClusters.size() == 0) {
@@ -557,19 +556,29 @@ public class PersistentTopicsBase extends AdminResource {
                                                                           boolean checkAllowAutoCreation) {
         return getPartitionedTopicMetadataAsync(topicName, authoritative, checkAllowAutoCreation)
                 .thenCompose(metadata -> {
-                    CompletableFuture<Void> ret;
-                    if (metadata.partitions == 0 && !checkAllowAutoCreation) {
+                    if (metadata.partitions > 1) {
+                        // Some clients does not support partitioned topic.
+                        return internalValidateClientVersionAsync().thenApply(__ -> metadata);
+                    } else if (metadata.partitions == 1) {
+                        return CompletableFuture.completedFuture(metadata);
+                    } else {
+                        // metadata.partitions == 0
                         // The topic may be a non-partitioned topic, so check if it exists here.
                         // However, when checkAllowAutoCreation is true, the client will create the topic if
                         // it doesn't exist. In this case, `partitions == 0` means the automatically created topic
                         // is a non-partitioned topic so we shouldn't check if the topic exists.
-                        ret = internalCheckTopicExists(topicName);
-                    } else if (metadata.partitions > 1) {
-                        ret = internalValidateClientVersionAsync();
-                    } else {
-                        ret = CompletableFuture.completedFuture(null);
+                        return pulsar().getBrokerService().isAllowAutoTopicCreationAsync(topicName)
+                                .thenCompose(brokerAllowAutoTopicCreation -> {
+                            if (checkAllowAutoCreation && brokerAllowAutoTopicCreation) {
+                                // Whether it exists or not, auto create a non-partitioned topic by client.
+                                return CompletableFuture.completedFuture(metadata);
+                            } else {
+                                // If it does not exist, response a Not Found error.
+                                // Otherwise, response a non-partitioned metadata.
+                                return internalCheckNonPartitionedTopicExists(topicName).thenApply(__ -> metadata);
+                            }
+                        });
                     }
-                    return ret.thenApply(__ -> metadata);
                 });
     }
 
@@ -714,6 +723,17 @@ public class PersistentTopicsBase extends AdminResource {
 
     protected CompletableFuture<Void> internalCheckTopicExists(TopicName topicName) {
         return pulsar().getNamespaceService().checkTopicExists(topicName)
+                .thenAccept(info -> {
+                    boolean exists = info.isExists();
+                    info.recycle();
+                    if (!exists) {
+                        throw new RestException(Status.NOT_FOUND, getTopicNotFoundErrorMessage(topicName.toString()));
+                    }
+                });
+    }
+
+    protected CompletableFuture<Void> internalCheckNonPartitionedTopicExists(TopicName topicName) {
+        return pulsar().getNamespaceService().checkNonPartitionedTopicExists(topicName)
                 .thenAccept(exist -> {
                     if (!exist) {
                         throw new RestException(Status.NOT_FOUND, getTopicNotFoundErrorMessage(topicName.toString()));
@@ -5531,8 +5551,10 @@ public class PersistentTopicsBase extends AdminResource {
                             "Only persistent topic can be set as shadow topic"));
                 }
                 futures.add(pulsar().getNamespaceService().checkTopicExists(shadowTopicName)
-                        .thenAccept(isExists -> {
-                            if (!isExists) {
+                        .thenAccept(info -> {
+                            boolean exists = info.isExists();
+                            info.recycle();
+                            if (!exists) {
                                 throw new RestException(Status.PRECONDITION_FAILED,
                                         "Shadow topic [" + shadowTopic + "] not exists.");
                             }

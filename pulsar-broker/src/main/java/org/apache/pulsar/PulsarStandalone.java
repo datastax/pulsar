@@ -18,6 +18,7 @@
  */
 package org.apache.pulsar;
 
+import static org.apache.commons.io.FileUtils.cleanDirectory;
 import static org.apache.pulsar.common.naming.NamespaceName.SYSTEM_NAMESPACE;
 import static org.apache.pulsar.common.naming.SystemTopicNames.TRANSACTION_COORDINATOR_ASSIGN;
 import com.beust.jcommander.Parameter;
@@ -25,6 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import io.netty.util.internal.PlatformDependent;
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -417,18 +419,22 @@ public class PulsarStandalone implements AutoCloseable {
         try {
             if (fnWorkerService != null) {
                 fnWorkerService.stop();
+                fnWorkerService = null;
             }
 
             if (broker != null) {
                 broker.close();
+                broker = null;
             }
 
             if (bkCluster != null) {
                 bkCluster.close();
+                bkCluster = null;
             }
 
             if (bkEnsemble != null) {
                 bkEnsemble.stop();
+                bkEnsemble = null;
             }
         } catch (Exception e) {
             log.error("Shutdown failed: {}", e.getMessage(), e);
@@ -439,7 +445,12 @@ public class PulsarStandalone implements AutoCloseable {
     void startBookieWithMetadataStore() throws Exception {
         if (StringUtils.isBlank(metadataStoreUrl)){
             log.info("Starting BK with RocksDb metadata store");
-            metadataStoreUrl = "rocksdb://" + Paths.get(metadataDir).toAbsolutePath();
+            Path metadataDirPath = Paths.get(metadataDir);
+            metadataStoreUrl = "rocksdb://" + metadataDirPath.toAbsolutePath();
+            if (wipeData && Files.exists(metadataDirPath)) {
+                log.info("Wiping RocksDb metadata store at {}", metadataStoreUrl);
+                cleanDirectory(metadataDirPath.toFile());
+            }
         } else {
             log.info("Starting BK with metadata store: {}", metadataStoreUrl);
         }
@@ -493,5 +504,11 @@ public class PulsarStandalone implements AutoCloseable {
         ShutdownUtil.triggerImmediateForcefulShutdown(exitCode);
     }
 
+    public String getBrokerServiceUrl() {
+        return broker.getBrokerServiceUrl();
+    }
 
+    public String getWebServiceUrl() {
+        return broker.getWebServiceAddress();
+    }
 }
