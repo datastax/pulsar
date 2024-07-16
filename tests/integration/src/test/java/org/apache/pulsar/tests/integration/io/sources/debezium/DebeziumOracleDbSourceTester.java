@@ -54,7 +54,6 @@ public class DebeziumOracleDbSourceTester extends SourceTester<DebeziumOracleDbC
 
         pulsarServiceUrl = "pulsar://pulsar-proxy:" + PulsarContainer.BROKER_PORT;
 
-        sourceConfig.put("connector.class", "io.debezium.connector.oracle.OracleConnector");
         sourceConfig.put("database.hostname", DebeziumOracleDbContainer.NAME);
         sourceConfig.put("database.port", "1521");
         sourceConfig.put("database.user", "dbzuser");
@@ -65,7 +64,6 @@ public class DebeziumOracleDbSourceTester extends SourceTester<DebeziumOracleDbC
         sourceConfig.put("snapshot.mode", "schema_only");
 
         sourceConfig.put("schema.include.list", "inv");
-        sourceConfig.put("schema.history.internal", "org.apache.pulsar.io.debezium.oracle.PulsarDatabaseHistory");
         sourceConfig.put("schema.history.internal.pulsar.service.url", pulsarServiceUrl);
         sourceConfig.put("topic.namespace", "debezium/oracle");
     }
