@@ -63,12 +63,16 @@ public class DebeziumMySqlSourceTester extends SourceTester<DebeziumMySQLContain
         sourceConfig.put("database.server.name", "dbserver1");
         sourceConfig.put("database.whitelist", "inventory");
         if (!testWithClientBuilder) {
-            sourceConfig.put("database.history.pulsar.service.url", pulsarServiceUrl);
+            sourceConfig.put("schema.history.internal.pulsar.service.url", pulsarServiceUrl);
         }
         sourceConfig.put("key.converter", converterClassName);
         sourceConfig.put("value.converter", converterClassName);
         sourceConfig.put("topic.namespace", "debezium/mysql-" +
                 (converterClassName.endsWith("AvroConverter") ? "avro" : "json"));
+        sourceConfig.put("connector.class", "io.debezium.connector.mysql.MySqlConnector");
+        sourceConfig.put("topic.prefix", "test");
+        sourceConfig.put("database.include.list", "inventory");
+        sourceConfig.put("include.schema.changes", "true");
     }
 
     @Override
