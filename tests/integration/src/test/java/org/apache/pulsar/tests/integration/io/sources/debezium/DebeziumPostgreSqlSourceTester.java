@@ -76,6 +76,9 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         sourceConfig.put("table.blacklist", "inventory.spatial_ref_sys,inventory.geom");
         sourceConfig.put("schema.history.internal.pulsar.service.url", pulsarServiceUrl);
         sourceConfig.put("topic.namespace", "debezium/postgresql");
+        sourceConfig.put("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
+        sourceConfig.put("topic.prefix", "test");
+        sourceConfig.put("table.include.list", "inventory");
     }
 
     @Override
