@@ -933,6 +933,9 @@ jobs:
           fi
           ./build/run_integration_group.sh ${{ matrix.group }} $coverage_args
 
+      - name: Collect Docker Logs
+        uses: jwalton/gh-docker-logs@v2.2.2
+
       - name: Upload coverage to build artifacts
         if: ${{ !matrix.no_coverage && needs.preconditions.outputs.collect_coverage == 'true' }}
         run: $GITHUB_WORKSPACE/build/pulsar_ci_tool.sh upload_systest_coverage_files ${{ matrix.group }}
