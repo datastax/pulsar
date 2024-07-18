@@ -40,6 +40,7 @@ public class DebeziumMongoDbSourceTester extends SourceTester<DebeziumMongoDbCon
     public DebeziumMongoDbSourceTester(PulsarCluster cluster) {
         super(NAME);
         this.pulsarCluster = cluster;
+        this.numEntriesExpectAfterStart = 0;
         pulsarServiceUrl = "pulsar://pulsar-proxy:" + PulsarContainer.BROKER_PORT;
 
         sourceConfig.put("mongodb.name", "dbserver1");
