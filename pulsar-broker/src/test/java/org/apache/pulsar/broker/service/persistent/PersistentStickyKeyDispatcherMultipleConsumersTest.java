@@ -34,8 +34,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
+import com.google.common.collect.BoundType;
+import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.EventLoopGroup;
@@ -44,6 +48,7 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.SucceededFuture;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -56,6 +61,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.bookkeeper.common.util.OrderedExecutor;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
@@ -64,6 +70,7 @@ import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.impl.EntryImpl;
 import org.apache.bookkeeper.mledger.impl.ManagedCursorImpl;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
+import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.service.BrokerService;
@@ -81,11 +88,14 @@ import org.apache.pulsar.common.api.proto.MessageMetadata;
 import org.apache.pulsar.common.policies.data.HierarchyTopicPolicies;
 import org.apache.pulsar.common.protocol.Commands;
 import org.apache.pulsar.common.protocol.Markers;
+import org.apache.pulsar.common.util.collections.ConcurrentOpenLongPairRangeSet;
+import org.apache.pulsar.common.util.collections.LongPairRangeSet;
 import org.awaitility.Awaitility;
 import org.mockito.ArgumentCaptor;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 @Test(groups = "broker")
@@ -93,6 +103,7 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
 
     private PulsarService pulsarMock;
     private BrokerService brokerMock;
+    private ManagedLedgerImpl ledgerMock;
     private ManagedCursorImpl cursorMock;
     private Consumer consumerMock;
     private PersistentTopic topicMock;
@@ -145,9 +156,44 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
         doReturn(topicName).when(topicMock).getName();
         doReturn(topicPolicies).when(topicMock).getHierarchyTopicPolicies();
 
+        ledgerMock = mock(ManagedLedgerImpl.class);
+        doAnswer((invocationOnMock -> {
+            final Position position = invocationOnMock.getArgument(0);
+            if (position.getEntryId() > 0) {
+                return PositionImpl.get(position.getLedgerId(), position.getEntryId() - 1);
+            } else {
+                fail("Undefined behavior on mock");
+                return PositionImpl.EARLIEST;
+            }
+        })).when(ledgerMock).getPreviousPosition(any(PositionImpl.class));
+        doAnswer((invocationOnMock -> {
+            final Position position = invocationOnMock.getArgument(0);
+            return PositionImpl.get(position.getLedgerId(), position.getEntryId() < 0 ? 0 : position.getEntryId() + 1);
+        })).when(ledgerMock).getNextValidPosition(any(PositionImpl.class));
+        doAnswer((invocationOnMock -> {
+            final Range<PositionImpl> range = invocationOnMock.getArgument(0);
+            Position fromPosition = range.lowerEndpoint();
+            boolean fromIncluded = range.lowerBoundType() == BoundType.CLOSED;
+            Position toPosition = range.upperEndpoint();
+            boolean toIncluded = range.upperBoundType() == BoundType.CLOSED;
+
+            long count = 0;
+
+            if (fromPosition.getLedgerId() == toPosition.getLedgerId()) {
+                // If the 2 positions are in the same ledger
+                count = toPosition.getEntryId() - fromPosition.getEntryId() - 1;
+                count += fromIncluded ? 1 : 0;
+                count += toIncluded ? 1 : 0;
+            } else {
+                fail("Undefined behavior on mock");
+            }
+            return count;
+        })).when(ledgerMock).getNumberOfEntries(any());
+
         cursorMock = mock(ManagedCursorImpl.class);
         doReturn(null).when(cursorMock).getLastIndividualDeletedRange();
         doReturn(subscriptionName).when(cursorMock).getName();
+        doReturn(ledgerMock).when(cursorMock).getManagedLedger();
 
         consumerMock = createMockConsumer();
         EventExecutor eventExecutor = mock(EventExecutor.class);
@@ -615,6 +661,319 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
             }
         }
         return null;
+    }
+
+    @DataProvider(name = "initializeLastSentPosition")
+    private Object[][] initialLastSentPositionProvider() {
+        return new Object[][] { { false }, { true } };
+    }
+
+    @Test(dataProvider = "initializeLastSentPosition")
+    public void testLastSentPositionAndIndividuallySentPositions(final boolean initializeLastSentPosition) throws Exception {
+        final Position initialLastSentPosition = PositionImpl.get(1, 10);
+        final LongPairRangeSet<PositionImpl> expectedIndividuallySentPositions
+                = new ConcurrentOpenLongPairRangeSet<>(4096, PositionImpl::get);
+
+        final Field lastSentPositionField = PersistentStickyKeyDispatcherMultipleConsumers.class
+                .getDeclaredField("lastSentPosition");
+        lastSentPositionField.setAccessible(true);
+        final LongPairRangeSet<PositionImpl> individuallySentPositions = persistentDispatcher.getIndividuallySentPositionsField();
+        final Supplier<Throwable> clearPosition = () -> {
+            try {
+                lastSentPositionField.set(persistentDispatcher, initializeLastSentPosition ? initialLastSentPosition : null);
+                individuallySentPositions.clear();
+                expectedIndividuallySentPositions.clear();
+            } catch (Throwable e) {
+                return e;
+            }
+            return null;
+        };
+        if (!initializeLastSentPosition) {
+            doReturn(initialLastSentPosition).when(cursorMock).getMarkDeletedPosition();
+            doAnswer(invocationOnMock -> {
+                // skip copy operation
+                return initialLastSentPosition;
+            }).when(cursorMock).processIndividuallyDeletedMessagesAndGetMarkDeletedPosition(any());
+        }
+
+        // Assume the range sequence is [1:0, 1:19], [2:0, 2:19], ..., [10:0, 10:19]
+        doAnswer((invocationOnMock -> {
+            final Position position = invocationOnMock.getArgument(0);
+            if (position.getEntryId() > 0) {
+                return PositionImpl.get(position.getLedgerId(), position.getEntryId() - 1);
+            } else if (position.getLedgerId() > 0) {
+                return PositionImpl.get(position.getLedgerId() - 1, 19);
+            } else {
+                throw new NullPointerException();
+            }
+        })).when(ledgerMock).getPreviousPosition(any(PositionImpl.class));
+        doAnswer((invocationOnMock -> {
+            final Position position = invocationOnMock.getArgument(0);
+            if (position.getEntryId() < 19) {
+                return PositionImpl.get(position.getLedgerId(), position.getEntryId() + 1);
+            } else {
+                return PositionImpl.get(position.getLedgerId() + 1, 0);
+            }
+        })).when(ledgerMock).getNextValidPosition(any(PositionImpl.class));
+        doReturn(PositionImpl.get(10, 19)).when(ledgerMock).getLastConfirmedEntry();
+        doAnswer((invocationOnMock -> {
+            final Range<PositionImpl> range = invocationOnMock.getArgument(0);
+            Position fromPosition = range.lowerEndpoint();
+            boolean fromIncluded = range.lowerBoundType() == BoundType.CLOSED;
+            Position toPosition = range.upperEndpoint();
+            boolean toIncluded = range.upperBoundType() == BoundType.CLOSED;
+
+            if (fromPosition.getLedgerId() == toPosition.getLedgerId()) {
+                // If the 2 positions are in the same ledger
+                long count = toPosition.getEntryId() - fromPosition.getEntryId() - 1;
+                count += fromIncluded ? 1 : 0;
+                count += toIncluded ? 1 : 0;
+                return count;
+            } else {
+                long count = 0;
+                // If the from & to are pointing to different ledgers, then we need to :
+                // 1. Add the entries in the ledger pointed by toPosition
+                count += toPosition.getEntryId();
+                count += toIncluded ? 1 : 0;
+
+                // 2. Add the entries in the ledger pointed by fromPosition
+                count += 20 - (fromPosition.getEntryId() + 1);
+                count += fromIncluded ? 1 : 0;
+
+                // 3. Add the whole ledgers entries in between
+                for (long i = fromPosition.getLedgerId() + 1; i < toPosition.getLedgerId(); i++) {
+                    count += 20;
+                }
+
+                return count;
+            }
+        })).when(ledgerMock).getNumberOfEntries(any());
+        assertEquals(ledgerMock.getNextValidPosition(PositionImpl.get(1, 0)), PositionImpl.get(1, 1));
+        assertEquals(ledgerMock.getNextValidPosition(PositionImpl.get(1, 19)), PositionImpl.get(2, 0));
+        assertEquals(ledgerMock.getPreviousPosition(PositionImpl.get(2, 0)), PositionImpl.get(1, 19));
+        assertThrows(NullPointerException.class, () -> ledgerMock.getPreviousPosition(PositionImpl.get(0, 0)));
+        assertEquals(ledgerMock.getNumberOfEntries(Range.openClosed(
+                PositionImpl.get(1, 0), PositionImpl.get(1, 0))), 0);
+        assertEquals(ledgerMock.getNumberOfEntries(Range.openClosed(
+                PositionImpl.get(1, -1), PositionImpl.get(1, 9))), 10);
+        assertEquals(ledgerMock.getNumberOfEntries(Range.openClosed(
+                PositionImpl.get(1, 19), PositionImpl.get(2, -1))), 0);
+        assertEquals(ledgerMock.getNumberOfEntries(Range.openClosed(
+                PositionImpl.get(1, 19), PositionImpl.get(2, 9))), 10);
+        assertEquals(ledgerMock.getNumberOfEntries(Range.openClosed(
+                PositionImpl.get(1, -1), PositionImpl.get(3, 19))), 60);
+
+        // Add a consumer
+        final Consumer consumer1 = mock(Consumer.class);
+        doReturn("consumer1").when(consumer1).consumerName();
+        when(consumer1.getAvailablePermits()).thenReturn(1000);
+        doReturn(true).when(consumer1).isWritable();
+        doReturn(channelMock).when(consumer1).sendMessages(anyList(), any(EntryBatchSizes.class),
+                any(EntryBatchIndexesAcks.class), anyInt(), anyLong(), anyLong(), any(RedeliveryTracker.class));
+        persistentDispatcher.addConsumer(consumer1);
+
+        /*
+         On single ledger
+         */
+
+        // Expected individuallySentPositions (isp): [(1:-1, 1:8]] (init) -> [(1:-1, 1:9]] (update) -> [] (remove)
+        // Expected lastSentPosition (lsp): 1:10 (init) -> 1:10 (remove)
+        // upper bound and the new entry are less than initial last sent position
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, -1, 1, 8);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 9, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+
+        // isp: [(1:-1, 1:9]] -> [(1:-1, 1:10]] -> []
+        // lsp: 1:10 -> 1:10
+        // upper bound is less than initial last sent position
+        // upper bound and the new entry are less than or equal to initial last sent position
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, -1, 1, 9);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 10, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+
+        // isp: [(1:-1, 1:2], (1:3, 1:4], (1:5, 1:6]] -> [(1:-1, 1:2], (1:3, 1:4], (1:5, 1:6], (1:9, 1:10]] -> []
+        // lsp: 1:10 -> 1:10
+        // upper bound and the new entry are less than or equal to initial last sent position
+        // individually sent positions has multiple ranges
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, -1, 1, 2);
+        individuallySentPositions.addOpenClosed(1, 3, 1, 4);
+        individuallySentPositions.addOpenClosed(1, 5, 1, 6);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 10, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+
+        // isp: [(1:-1, 1:10]] -> [(1:-1, 1:11]] -> []
+        // lsp: 1:10 -> 1:11
+        // upper bound is less than or equal to initial last sent position
+        // the new entry is next position of initial last sent position
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, -1, 1, 10);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 11, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), PositionImpl.get(1, 11).toString());
+
+        // isp: [(1:-1, 1:9]] -> [(1:-1, 1:9], (1:10, 1:11]] -> []
+        // lsp: 1:10 -> 1:11
+        // upper bound is less than initial last sent position
+        // the new entry is next position of initial last sent position
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, -1, 1, 9);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 11, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), PositionImpl.get(1, 11).toString());
+
+        // isp: [(1:11, 1:15]] -> [(1:10, 1:15]] -> []
+        // lsp: 1:10 -> 1:15
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry is next position of initial last sent position
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 15);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 11, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), PositionImpl.get(1, 15).toString());
+
+        // isp: [(1:11, 1:15]] -> [(1:10, 1:16]] -> []
+        // lsp: 1:10 -> 1:16
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entries contain next position of initial last sent position
+        // first of the new entries is less than initial last sent position
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 15);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 9, createMessage("test", 1)),
+                        EntryImpl.create(1, 11, createMessage("test", 2)),
+                        EntryImpl.create(1, 16, createMessage("test", 3))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), PositionImpl.get(1, 16).toString());
+
+        // isp: [(1:11, 1:15]] -> [(1:11, 1:15]] -> [(1:11, 1:15]]
+        // lsp: 1:10 -> 1:10
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry isn't  next position of initial last sent position
+        // the range contains the new entry
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 15);
+        expectedIndividuallySentPositions.addOpenClosed(1, 11, 1, 15);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 15, createMessage("test", 1))), true);
+        assertEquals(individuallySentPositions.toString(), expectedIndividuallySentPositions.toString());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+
+        // isp: [(1:11, 1:15]] -> [(1:11, 1:16]] -> [(1:11, 1:16]]
+        // lsp: 1:10 -> 1:10
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry isn't next position of initial last sent position
+        // the range doesn't contain the new entry
+        // the new entry is next position of upper bound
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 15);
+        expectedIndividuallySentPositions.addOpenClosed(1, 11, 1, 16);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 16, createMessage("test", 1))), true);
+        assertEquals(individuallySentPositions.toString(), expectedIndividuallySentPositions.toString());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+
+        // isp: [(1:11, 1:15]] -> [(1:11, 1:15], (1:16, 1:17]] -> [(1:11, 1:15], (1:16, 1:17]]
+        // lsp: 1:10 -> 1:10
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry isn't next position of initial last sent position
+        // the range doesn't contain the new entry
+        // the new entry isn't next position of upper bound
+        // the new entry is same ledger
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 15);
+        expectedIndividuallySentPositions.addOpenClosed(1, 11, 1, 15);
+        expectedIndividuallySentPositions.addOpenClosed(1, 16, 1, 17);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 17, createMessage("test", 1))), true);
+        assertEquals(individuallySentPositions.toString(), expectedIndividuallySentPositions.toString());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+
+        /*
+        On multiple contiguous ledgers
+         */
+
+        // isp: [(1:11, 1:18]] -> [(1:11, 1:18], (2:-1, 2:0]] -> [(1:11, 1:18], (2:-1, 2:0]]
+        // lsp: 1:10 -> 1:10
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry isn't next position of initial last sent position
+        // the range doesn't contain the new entry
+        // the new entry isn't next position of upper bound
+        // the new entry isn't same ledger
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 18);
+        expectedIndividuallySentPositions.addOpenClosed(1, 11, 1, 18);
+        expectedIndividuallySentPositions.addOpenClosed(2, -1, 2, 0);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(2, 0, createMessage("test", 1))), true);
+        assertEquals(individuallySentPositions.toString(), expectedIndividuallySentPositions.toString());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+
+        // isp: [(1:11, 1:19], (2:-1, 2:0]] -> [(1:10, 1:19], (2:-1, 2:0]] -> []
+        // lsp: 1:10 -> 2:0
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry is next position of initial last sent position
+        // the new entry isn't same ledger
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 19);
+        individuallySentPositions.addOpenClosed(2, -1, 2, 0);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 11, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), PositionImpl.get(2, 0).toString());
+
+        // isp: [(1:11, 1:19], (2:-1, 2:19], (3:-1, 3:0]] -> [(1:10, 1:19], (2:-1, 2:19], (3:-1, 3:0]] -> []
+        // lsp: 1:10 -> 3:0
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry is next position of initial last sent position
+        // the new entry isn't same ledger
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 19);
+        individuallySentPositions.addOpenClosed(2, -1, 2, 19);
+        individuallySentPositions.addOpenClosed(3, -1, 3, 0);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(1, 11, createMessage("test", 1))), true);
+        assertTrue(individuallySentPositions.isEmpty());
+        assertEquals(persistentDispatcher.getLastSentPosition(), PositionImpl.get(3, 0).toString());
+
+        // isp: [(1:11, 1:19], (2:-1, 2:0]] -> [(1:11, 1:19], (2:-1, 2:1]] -> [(1:11, 1:19], (2:-1, 2:1]]
+        // lsp: 1:10 -> 1:10
+        // upper bound is greater than initial last sent position
+        // the range doesn't contain next position of initial last sent position
+        // the new entry isn't next position of initial last sent position
+        // the new entry isn't same ledger
+        assertNull(clearPosition.get());
+        individuallySentPositions.addOpenClosed(1, 11, 1, 19);
+        individuallySentPositions.addOpenClosed(2, -1, 2, 0);
+        expectedIndividuallySentPositions.addOpenClosed(1, 11, 1, 19);
+        expectedIndividuallySentPositions.addOpenClosed(2, -1, 2, 1);
+        persistentDispatcher.sendMessagesToConsumers(PersistentDispatcherMultipleConsumers.ReadType.Normal,
+                Arrays.asList(EntryImpl.create(2, 1, createMessage("test", 1))), true);
+        assertEquals(individuallySentPositions.toString(), expectedIndividuallySentPositions.toString());
+        assertEquals(persistentDispatcher.getLastSentPosition(), initialLastSentPosition.toString());
+    }
+
+    private ByteBuf createMessage(String message, int sequenceId) {
+        return createMessage(message, sequenceId, "testKey");
     }
 
     private EntryImpl createEntry(long ledgerId, long entryId, String message, long sequenceId) {
