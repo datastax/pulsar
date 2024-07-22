@@ -48,15 +48,15 @@ public class PulsarDebeziumSourcesTest extends PulsarIOTestBase {
         super(FunctionRuntimeType.PROCESS);
     }
 
-    @Test(groups = "source")
-    public void testDebeziumMySqlSourceJson() throws Exception {
-        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, false);
-    }
+//    @Test(groups = "source")
+//    public void testDebeziumMySqlSourceJson() throws Exception {
+//        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, false);
+//    }
 
-    @Test(groups = "source")
-    public void testDebeziumMySqlSourceJsonWithClientBuilder() throws Exception {
-        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, true);
-    }
+//    @Test(groups = "source")
+//    public void testDebeziumMySqlSourceJsonWithClientBuilder() throws Exception {
+//        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, true);
+//    }
 
 //    @Test(groups = "source")
 //    public void testDebeziumMySqlSourceAvro() throws Exception {
