@@ -55,13 +55,14 @@ public class DebeziumMySqlSourceTester extends SourceTester<DebeziumMySQLContain
         this.pulsarCluster = cluster;
         pulsarServiceUrl = "pulsar://pulsar-proxy:" + PulsarContainer.BROKER_PORT;
 
+        sourceConfig.put("connector.class", "io.debezium.connector.mysql.MySqlConnector");
         sourceConfig.put("database.hostname", DebeziumMySQLContainer.NAME);
         sourceConfig.put("database.port", "3306");
         sourceConfig.put("database.user", "debezium");
         sourceConfig.put("database.password", "dbz");
         sourceConfig.put("database.server.id", "184054");
         sourceConfig.put("database.server.name", "dbserver1");
-        sourceConfig.put("database.whitelist", "inventory");
+        sourceConfig.put("database.include.list", "inventory");
         if (!testWithClientBuilder) {
             sourceConfig.put("schema.history.internal.pulsar.service.url", pulsarServiceUrl);
         }
@@ -69,10 +70,7 @@ public class DebeziumMySqlSourceTester extends SourceTester<DebeziumMySQLContain
         sourceConfig.put("value.converter", converterClassName);
         sourceConfig.put("topic.namespace", "debezium/mysql-" +
                 (converterClassName.endsWith("AvroConverter") ? "avro" : "json"));
-        sourceConfig.put("connector.class", "io.debezium.connector.mysql.MySqlConnector");
-        sourceConfig.put("topic.prefix", "test");
-        sourceConfig.put("database.include.list", "inventory");
-        sourceConfig.put("include.schema.changes", "true");
+        sourceConfig.put("topic.prefix", "dbserver1");
     }
 
     @Override

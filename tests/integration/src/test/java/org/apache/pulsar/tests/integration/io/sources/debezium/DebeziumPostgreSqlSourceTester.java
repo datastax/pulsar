@@ -67,6 +67,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
 
         pulsarServiceUrl = "pulsar://pulsar-proxy:" + PulsarContainer.BROKER_PORT;
 
+        sourceConfig.put("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
         sourceConfig.put("database.hostname", DebeziumPostgreSqlContainer.NAME);
         sourceConfig.put("database.port", "5432");
         sourceConfig.put("database.user", "postgres");
@@ -75,11 +76,12 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         sourceConfig.put("database.server.name", "dbserver1");
         sourceConfig.put("database.dbname", "postgres");
         sourceConfig.put("schema.whitelist", "inventory");
-        sourceConfig.put("table.blacklist", "inventory.spatial_ref_sys,inventory.geom");
+        sourceConfig.put("plugin.name", "pgoutput");
         sourceConfig.put("schema.history.internal.pulsar.service.url", pulsarServiceUrl);
+        sourceConfig.put("schema.history.internal", "org.apache.pulsar.io.debezium.PulsarDatabaseHistory");
         sourceConfig.put("topic.namespace", "debezium/postgresql");
-        sourceConfig.put("connector.class", "io.debezium.connector.postgresql.PostgresConnector");
-        sourceConfig.put("topic.prefix", "test");
+        sourceConfig.put("topic.prefix", "dbserver1");
+        sourceConfig.put("table.blacklist", "inventory.spatial_ref_sys,inventory.geom");
         sourceConfig.put("table.include.list", "inventory");
     }
 
