@@ -34,7 +34,6 @@ import org.apache.pulsar.tests.integration.containers.DebeziumMySQLContainer;
 import org.apache.pulsar.tests.integration.containers.DebeziumPostgreSqlContainer;
 import org.apache.pulsar.tests.integration.io.PulsarIOTestBase;
 import org.apache.pulsar.tests.integration.topologies.FunctionRuntimeType;
-import org.testng.annotations.Test;
 
 import lombok.Cleanup;
 import lombok.extern.slf4j.Slf4j;
