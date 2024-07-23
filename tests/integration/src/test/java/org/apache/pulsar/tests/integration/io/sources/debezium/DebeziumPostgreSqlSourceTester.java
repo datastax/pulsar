@@ -19,6 +19,7 @@
 package org.apache.pulsar.tests.integration.io.sources.debezium;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -102,6 +103,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres "+
                         "-c \"select count(1), max(id) from inventory.products where name='test-debezium' and weight=10;\"");
+        Thread.sleep(180000);
     }
 
     @Override
@@ -111,6 +113,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
                         "-c \"delete from inventory.products where name='test-debezium';\"");
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c \"select count(1) from inventory.products where name='test-debezium';\"");
+        Thread.sleep(180000);
     }
 
     @Override
@@ -122,6 +125,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c " +
                         "\"select count(1) from inventory.products where name='test-debezium' and weight=20;\"");
+        Thread.sleep(180000);
     }
 
     @Override
