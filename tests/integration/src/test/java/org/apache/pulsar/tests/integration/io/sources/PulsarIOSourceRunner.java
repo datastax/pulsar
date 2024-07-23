@@ -125,7 +125,7 @@ public class PulsarIOSourceRunner extends PulsarIOTestRunner {
                                          String outputTopicName) throws Exception {
         final String[] commands = {
             PulsarCluster.ADMIN_SCRIPT,
-            "source", "create",
+            "source", "localrun",
             "--tenant", tenant,
             "--namespace", namespace,
             "--name", sourceName,
