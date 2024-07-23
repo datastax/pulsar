@@ -60,6 +60,7 @@ public class DebeziumMySqlSourceTester extends SourceTester<DebeziumMySQLContain
         sourceConfig.put("database.password", "dbz");
         sourceConfig.put("database.server.id", "184054");
         sourceConfig.put("database.server.name", "dbserver1");
+        sourceConfig.put("database.whitelist", "inventory");
         sourceConfig.put("database.include.list", "inventory");
         if (!testWithClientBuilder) {
             sourceConfig.put("schema.history.internal.pulsar.service.url", pulsarServiceUrl);
