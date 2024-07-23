@@ -19,7 +19,6 @@
 package org.apache.pulsar.tests.integration.io.sources.debezium;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
