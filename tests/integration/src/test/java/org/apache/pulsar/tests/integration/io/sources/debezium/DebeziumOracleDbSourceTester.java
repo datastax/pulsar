@@ -50,7 +50,7 @@ public class DebeziumOracleDbSourceTester extends SourceTester<DebeziumOracleDbC
         super(NAME);
         this.pulsarCluster = cluster;
         this.numEntriesToInsert = 1;
-        this.numEntriesExpectAfterStart = 0;
+        this.numEntriesExpectAfterStart = 1;
 
         pulsarServiceUrl = "pulsar://pulsar-proxy:" + PulsarContainer.BROKER_PORT;
 
