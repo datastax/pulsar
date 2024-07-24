@@ -48,20 +48,20 @@ public class PulsarDebeziumSourcesTest extends PulsarIOTestBase {
         super(FunctionRuntimeType.PROCESS);
     }
 
-//    @Test(groups = "source")
-//    public void testDebeziumMySqlSourceJson() throws Exception {
-//        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, false);
-//    }
-//
-//    @Test(groups = "source")
-//    public void testDebeziumMySqlSourceJsonWithClientBuilder() throws Exception {
-//        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, true);
-//    }
-//
-//    @Test(groups = "source")
-//    public void testDebeziumMySqlSourceAvro() throws Exception {
-//        testDebeziumMySqlConnect("io.confluent.connect.avro.AvroConverter", false, false);
-//    }
+    @Test(groups = "source")
+    public void testDebeziumMySqlSourceJson() throws Exception {
+        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, false);
+    }
+
+    @Test(groups = "source")
+    public void testDebeziumMySqlSourceJsonWithClientBuilder() throws Exception {
+        testDebeziumMySqlConnect("org.apache.kafka.connect.json.JsonConverter", true, true);
+    }
+
+    @Test(groups = "source")
+    public void testDebeziumMySqlSourceAvro() throws Exception {
+        testDebeziumMySqlConnect("io.confluent.connect.avro.AvroConverter", false, false);
+    }
 
     @Test(groups = "source")
     public void testDebeziumPostgreSqlSource() throws Exception {
@@ -69,15 +69,15 @@ public class PulsarDebeziumSourcesTest extends PulsarIOTestBase {
     }
 
 
-//    @Test(groups = "source")
-//    public void testDebeziumMongoDbSource() throws Exception{
-//        testDebeziumMongoDbConnect("org.apache.kafka.connect.json.JsonConverter", true);
-//    }
-//
-//    @Test(groups = "source")
-//    public void testDebeziumMsSqlSource() throws Exception{
-//        testDebeziumMsSqlConnect("org.apache.kafka.connect.json.JsonConverter", true);
-//    }
+    @Test(groups = "source")
+    public void testDebeziumMongoDbSource() throws Exception{
+        testDebeziumMongoDbConnect("org.apache.kafka.connect.json.JsonConverter", true);
+    }
+
+    @Test(groups = "source")
+    public void testDebeziumMsSqlSource() throws Exception{
+        testDebeziumMsSqlConnect("org.apache.kafka.connect.json.JsonConverter", true);
+    }
 
     private void testDebeziumMySqlConnect(String converterClassName, boolean jsonWithEnvelope,
                                           boolean testWithClientBuilder) throws Exception {
