@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.common.schema.KeyValue;
 import org.apache.pulsar.tests.integration.containers.DebeziumPostgreSqlContainer;
 import org.apache.pulsar.tests.integration.containers.PulsarContainer;
 import org.apache.pulsar.tests.integration.docker.ContainerExecResult;
@@ -102,7 +104,6 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres "+
                         "-c \"select count(1), max(id) from inventory.products where name='test-debezium' and weight=10;\"");
-        Thread.sleep(180000);
     }
 
     @Override
@@ -112,7 +113,6 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
                         "-c \"delete from inventory.products where name='test-debezium';\"");
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c \"select count(1) from inventory.products where name='test-debezium';\"");
-        Thread.sleep(180000);
     }
 
     @Override
@@ -124,7 +124,6 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c " +
                         "\"select count(1) from inventory.products where name='test-debezium' and weight=20;\"");
-        Thread.sleep(180000);
     }
 
     @Override
