@@ -102,6 +102,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres "+
                         "-c \"select count(1), max(id) from inventory.products where name='test-debezium' and weight=10;\"");
+        Thread.sleep(120000);
     }
 
     @Override
@@ -111,6 +112,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
                         "-c \"delete from inventory.products where name='test-debezium';\"");
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c \"select count(1) from inventory.products where name='test-debezium';\"");
+        Thread.sleep(120000);
     }
 
     @Override
@@ -122,6 +124,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c " +
                         "\"select count(1) from inventory.products where name='test-debezium' and weight=20;\"");
+        Thread.sleep(120000);
     }
 
     @Override

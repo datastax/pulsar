@@ -129,7 +129,7 @@ public abstract class SourceTester<ServiceContainerT extends GenericContainer> i
                 Assert.assertTrue(value.contains(this.eventContains(eventType, true)));
             }
             consumer.acknowledge(msg);
-            msg = consumer.receive(30, TimeUnit.SECONDS);
+            msg = consumer.receive(1, TimeUnit.SECONDS);
         }
 
         Assert.assertEquals(recordsNumber, number);
