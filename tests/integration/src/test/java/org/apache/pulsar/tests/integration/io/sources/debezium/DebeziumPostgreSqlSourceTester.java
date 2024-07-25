@@ -24,8 +24,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.tests.integration.containers.DebeziumPostgreSqlContainer;
 import org.apache.pulsar.tests.integration.containers.PulsarContainer;
+import org.apache.pulsar.tests.integration.docker.ContainerExecResult;
 import org.apache.pulsar.tests.integration.io.sources.SourceTester;
 import org.apache.pulsar.tests.integration.topologies.PulsarCluster;
+import org.testng.Assert;
 
 /**
  * A tester for testing Debezium Postgresql source.
@@ -100,7 +102,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres "+
                         "-c \"select count(1), max(id) from inventory.products where name='test-debezium' and weight=10;\"");
-        Thread.sleep(120000);
+//        Thread.sleep(120000);
     }
 
     @Override
@@ -110,7 +112,7 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
                         "-c \"delete from inventory.products where name='test-debezium';\"");
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c \"select count(1) from inventory.products where name='test-debezium';\"");
-        Thread.sleep(120000);
+//        Thread.sleep(120000);
     }
 
     @Override
@@ -122,31 +124,31 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         this.debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
                 "psql -h 127.0.0.1 -U postgres -d postgres -c " +
                         "\"select count(1) from inventory.products where name='test-debezium' and weight=20;\"");
-        Thread.sleep(120000);
+//        Thread.sleep(120000);
     }
 
-//    @Override
-//    public void doPostValidationCheck(String eventType) {
-//        super.doPostValidationCheck(eventType);
-//        /*
-//        confirmed_flush_lsn in pg_replication_slots table has to change,
-//        otherwise postgres won't truncate WAL and the disk space will grow.
-//        I.e. upgrade from debezium 1.0.0 to 1.0.3 resulted in confirmed_flush_lsn
-//        not updating in insert-heavy load.
-//        */
-//        try {
-//            ContainerExecResult res = debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
-//                    "psql -h 127.0.0.1 -U postgres -d postgres -c \"select confirmed_flush_lsn from pg_replication_slots;\"");
-//            res.assertNoStderr();
-//            String lastConfirmedFlushLsn = res.getStdout();
-//            log.info("Current confirmedFlushLsn: \n{} \nLast confirmedFlushLsn: \n{}",
-//                    confirmedFlushLsn.get(), lastConfirmedFlushLsn);
-//            Assert.assertNotEquals(confirmedFlushLsn.get(), lastConfirmedFlushLsn);
-//            confirmedFlushLsn.set(lastConfirmedFlushLsn);
-//        } catch (Exception e) {
-//            Assert.fail("failed to get flush lsn", e);
-//        }
-//    }
+    @Override
+    public void doPostValidationCheck(String eventType) {
+        super.doPostValidationCheck(eventType);
+        /*
+        confirmed_flush_lsn in pg_replication_slots table has to change,
+        otherwise postgres won't truncate WAL and the disk space will grow.
+        I.e. upgrade from debezium 1.0.0 to 1.0.3 resulted in confirmed_flush_lsn
+        not updating in insert-heavy load.
+        */
+        try {
+            ContainerExecResult res = debeziumPostgresqlContainer.execCmd("/bin/bash", "-c",
+                    "psql -h 127.0.0.1 -U postgres -d postgres -c \"select confirmed_flush_lsn from pg_replication_slots;\"");
+            res.assertNoStderr();
+            String lastConfirmedFlushLsn = res.getStdout();
+            log.info("Current confirmedFlushLsn: \n{} \nLast confirmedFlushLsn: \n{}",
+                    confirmedFlushLsn.get(), lastConfirmedFlushLsn);
+            Assert.assertNotEquals(confirmedFlushLsn.get(), lastConfirmedFlushLsn);
+            confirmedFlushLsn.set(lastConfirmedFlushLsn);
+        } catch (Exception e) {
+            Assert.fail("failed to get flush lsn", e);
+        }
+    }
 
     @Override
     public Map<String, String> produceSourceMessages(int numMessages) {
