@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * It reads binlog from Postgres, and store the debezium output into Pulsar.
  * This test verify that the target topic contains wanted number messages.
  *
- * Debezium Postgresql Container is "debezium/example-postgres:0.10",
+ * Debezium Postgresql Container is "debezium/example-postgres:2.5.0.Final",
  * which is a Postgresql database server preconfigured with an inventory database.
  */
 @Slf4j
@@ -76,13 +76,10 @@ public class DebeziumPostgreSqlSourceTester extends SourceTester<DebeziumPostgre
         sourceConfig.put("database.server.name", "dbserver1");
         sourceConfig.put("database.dbname", "postgres");
         sourceConfig.put("schema.whitelist", "inventory");
-        sourceConfig.put("plugin.name", "pgoutput");
+        sourceConfig.put("table.blacklist", "inventory.spatial_ref_sys,inventory.geom");
         sourceConfig.put("schema.history.internal.pulsar.service.url", pulsarServiceUrl);
-        sourceConfig.put("schema.history.internal", "org.apache.pulsar.io.debezium.PulsarDatabaseHistory");
         sourceConfig.put("topic.namespace", "debezium/postgresql");
         sourceConfig.put("topic.prefix", "dbserver1");
-        sourceConfig.put("table.blacklist", "inventory.spatial_ref_sys,inventory.geom");
-        sourceConfig.put("table.include.list", "inventory");
     }
 
     @Override
