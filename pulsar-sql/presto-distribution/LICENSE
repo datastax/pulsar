@@ -207,19 +207,19 @@ This projects includes binary packages with the following licenses:
 The Apache Software License, Version 2.0
 
   * Jackson
-    - jackson-annotations-2.16.0.jar
-    - jackson-core-2.16.0.jar
-    - jackson-databind-2.16.0.jar
-    - jackson-dataformat-smile-2.16.0.jar
-    - jackson-datatype-guava-2.16.0.jar
-    - jackson-datatype-jdk8-2.16.0.jar
-    - jackson-datatype-joda-2.16.0.jar
-    - jackson-datatype-jsr310-2.16.0.jar
-    - jackson-dataformat-yaml-2.16.0.jar
-    - jackson-jaxrs-base-2.16.0.jar
-    - jackson-jaxrs-json-provider-2.16.0.jar
-    - jackson-module-jaxb-annotations-2.16.0.jar
-    - jackson-module-jsonSchema-2.16.0.jar
+    - jackson-annotations-2.17.2.jar
+    - jackson-core-2.17.2.jar
+    - jackson-databind-2.17.2.jar
+    - jackson-dataformat-smile-2.17.2.jar
+    - jackson-datatype-guava-2.17.2.jar
+    - jackson-datatype-jdk8-2.17.2.jar
+    - jackson-datatype-joda-2.17.2.jar
+    - jackson-datatype-jsr310-2.17.2.jar
+    - jackson-dataformat-yaml-2.17.2.jar
+    - jackson-jaxrs-base-2.17.2.jar
+    - jackson-jaxrs-json-provider-2.17.2.jar
+    - jackson-module-jaxb-annotations-2.17.2.jar
+    - jackson-module-jsonSchema-2.17.2.jar
  * Guava
     - guava-32.1.1-jre.jar
     - listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar
@@ -349,6 +349,7 @@ The Apache Software License, Version 2.0
   * Log4j
     - log4j-api-2.25.3.jar
     - log4j-core-2.25.3.jar
+    - log4j-slf4j-impl-2.25.3.jar
   * Log4j implemented over SLF4J
     - log4j-over-slf4j-1.7.32.jar
   * Lucene Common Analyzers
@@ -452,7 +453,7 @@ The Apache Software License, Version 2.0
   * Snappy
     - snappy-java-1.1.10.5.jar
   * Jackson
-    - jackson-module-parameter-names-2.16.0.jar
+    - jackson-module-parameter-names-2.17.2.jar
   * Java Assist
     - javassist-3.25.0-GA.jar
   * Java Native Access
@@ -468,6 +469,8 @@ The Apache Software License, Version 2.0
     - zookeeper-jute-3.9.4.jar
   * Apache Yetus Audience Annotations
     - audience-annotations-0.12.0.jar
+  * Swagger
+    - swagger-annotations-1.6.10.jar
   * Perfmark
     - perfmark-api-0.26.0.jar
   * Stream Lib
