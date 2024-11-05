@@ -34,6 +34,7 @@ Learn more about Pulsar at https://pulsar.apache.org
 
 ## Main features
 
+- Dummy PR
 - Horizontally scalable (Millions of independent topics and millions
   of messages published per second)
 - Strong ordering and consistency guarantees
