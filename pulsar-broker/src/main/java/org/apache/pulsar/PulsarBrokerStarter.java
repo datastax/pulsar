@@ -69,7 +69,7 @@ public class PulsarBrokerStarter {
     private static ServiceConfiguration loadConfig(String configFile) throws Exception {
         try (InputStream inputStream = new FileInputStream(configFile)) {
             ServiceConfiguration config = create(inputStream, ServiceConfiguration.class);
-            // it validates provided configuration is completed
+            // it validates provided configuration is completed ok
             isComplete(config);
             return config;
         }
