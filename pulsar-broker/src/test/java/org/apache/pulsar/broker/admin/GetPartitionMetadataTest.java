@@ -144,6 +144,7 @@ public class GetPartitionMetadataTest extends TestRetrySupport {
         conf.setBrokerDeleteInactiveTopicsEnabled(false);
         conf.setBrokerShutdownTimeoutMs(0L);
         conf.setLoadBalancerSheddingEnabled(false);
+        conf.setLoadBalancerOverrideBrokerNicSpeedGbps(Optional.of(1.0d));
     }
 
     protected PulsarClientImpl[] getClientsToTest() {
