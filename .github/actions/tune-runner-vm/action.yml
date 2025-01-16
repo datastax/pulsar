@@ -71,6 +71,10 @@ runs:
             # stop Azure Linux agent to save RAM
             sudo systemctl stop walinuxagent.service || true
 
+            # Install cgroup-tools package to use cgget command
+            sudo apt-get update
+            sudo apt-get install -y cgroup-tools
+          
             # show memory
             free -m
             # show disk
