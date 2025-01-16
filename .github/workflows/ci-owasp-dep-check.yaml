@@ -78,7 +78,7 @@ jobs:
           sudo swapoff -a
           sudo rm -rf /swapfile /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt clean
-          docker rmi $(docker images -q) -f
+          docker rmi $(docker images -q) -f || echo "No Docker images to remove."
           df -h
 
       # Projects dependent on flume, hdfs, hbase, and presto currently excluded from the scan.

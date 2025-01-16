@@ -79,7 +79,7 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt clean
-          docker rmi $(docker images -q) -f
+          docker rmi $(docker images -q) -f || echo "No Docker images to remove."
           df -h
 
       - name: run install by skip tests

@@ -76,7 +76,7 @@ jobs:
         if: ${{ steps.check_changes.outputs.docs_only != 'true' }}
         run: |
           sudo apt clean
-          docker rmi $(docker images -q) -f
+          docker rmi $(docker images -q) -f || echo "No Docker images to remove."
           df -h
 
       - name: build package
