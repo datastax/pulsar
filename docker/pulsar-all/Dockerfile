@@ -32,7 +32,6 @@ RUN mv /apache-pulsar-offloaders-*/offloaders /offloaders
 FROM ${PULSAR_IO_KINESIS_KPL_IMAGE} AS pulsar-io-kinesis-sink-kinesis_producer
 
 FROM ${PULSAR_IMAGE}
-COPY --from=pulsar-extensions /connectors /pulsar/connectors
 COPY --from=pulsar-extensions /connectors/pulsar-io-elastic-search-*.nar /pulsar/connectors/
 COPY --from=pulsar-extensions /connectors/pulsar-io-kinesis-*.nar /pulsar/connectors/
 # Exclude kafka-connect connector
