@@ -33,6 +33,14 @@ FROM ${PULSAR_IO_KINESIS_KPL_IMAGE} AS pulsar-io-kinesis-sink-kinesis_producer
 
 FROM ${PULSAR_IMAGE}
 COPY --from=pulsar-extensions /connectors /pulsar/connectors
+COPY --from=pulsar-extensions /connectors/pulsar-io-elastic-search-*.nar /pulsar/connectors/
+COPY --from=pulsar-extensions /connectors/pulsar-io-kinesis-*.nar /pulsar/connectors/
+# Exclude kafka-connect connector
+COPY --from=pulsar-extensions "/connectors/pulsar-io-kafka-[^connect-adaptor*]*.nar" /pulsar/connectors/
+COPY --from=pulsar-extensions /connectors/pulsar-io-jdbc-*.nar /pulsar/connectors/
+COPY --from=pulsar-extensions /connectors/pulsar-io-debezium-*.nar /pulsar/connectors/
+COPY --from=pulsar-extensions /connectors/pulsar-io-data-generator-*.nar /pulsar/connectors/
+COPY --from=pulsar-extensions /connectors/pulsar-io-http-*.nar /pulsar/connectors/
 COPY --from=pulsar-extensions /offloaders /pulsar/offloaders
 # Copy the kinesis_producer native executable compiled for Alpine musl to the pulsar-all image
 # This is required to support the Pulsar IO Kinesis sink connector
