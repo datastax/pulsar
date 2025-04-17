@@ -251,12 +251,14 @@ public class DefaultLookupProxyHandler implements LookupProxyHandler {
             // Connected to backend broker
             long requestId = proxyConnection.newRequestId();
             ByteBuf command;
-            command = Commands.newPartitionMetadataRequest(topicName.toString(), requestId, true);
+            command = Commands.newPartitionMetadataRequest(topicName.toString(), requestId,
+                    partitionMetadata.isMetadataAutoCreationEnabled());
             clientCnx.newLookup(command, requestId).whenComplete((r, t) -> {
                 if (t != null) {
                     log.warn("[{}] failed to get Partitioned metadata : {}", topicName.toString(),
                             t.getMessage(), t);
-                    writeAndFlush(Commands.newLookupErrorResponse(getServerError(t),
+                    PulsarClientException pce = PulsarClientException.unwrap(t);
+                    writeAndFlush(Commands.newLookupErrorResponse(clientCnx.revertClientExToErrorCode(pce),
                             t.getMessage(), clientRequestId));
                 } else {
                     writeAndFlush(

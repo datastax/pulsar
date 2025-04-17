@@ -23,6 +23,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.requireNonNull;
 import static org.mockito.Mockito.doReturn;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.fail;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.EventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
@@ -50,6 +52,7 @@ import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.Producer;
 import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 import org.apache.pulsar.client.api.SubscriptionType;
@@ -64,12 +67,14 @@ import org.apache.pulsar.common.api.proto.FeatureFlags;
 import org.apache.pulsar.common.api.proto.ProtocolVersion;
 import org.apache.pulsar.common.configuration.PulsarConfigurationLoader;
 import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.partition.PartitionedTopicMetadata;
 import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.TenantInfo;
 import org.apache.pulsar.common.policies.data.TenantInfoImpl;
 import org.apache.pulsar.common.policies.data.TopicType;
 import org.apache.pulsar.common.protocol.Commands;
 import org.apache.pulsar.common.schema.SchemaInfo;
+import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.pulsar.common.util.netty.EventLoopUtil;
 import org.apache.pulsar.metadata.impl.ZKMetadataStore;
 import org.mockito.Mockito;
@@ -114,6 +119,13 @@ public class ProxyTest extends MockedPulsarServiceBaseTest {
                 .createConfigurationMetadataStore();
 
         proxyService.start();
+
+        // create default resources.
+        admin.clusters().createCluster(conf.getClusterName(),
+            ClusterData.builder().serviceUrl(pulsar.getWebServiceAddress()).build());
+        TenantInfo tenantInfo = new TenantInfoImpl(Collections.emptySet(), Collections.singleton(conf.getClusterName()));
+        admin.tenants().createTenant("public", tenantInfo);
+        admin.namespaces().createNamespace("public/default");
     }
 
     protected void initializeProxyConfig() throws Exception {
@@ -127,12 +139,13 @@ public class ProxyTest extends MockedPulsarServiceBaseTest {
                 proxyConfig.getBrokerClientAuthenticationParameters());
         proxyClientAuthentication.start();
 
-        // create default resources.
-        admin.clusters().createCluster(conf.getClusterName(),
-            ClusterData.builder().serviceUrl(pulsar.getWebServiceAddress()).build());
-        TenantInfo tenantInfo = new TenantInfoImpl(Collections.emptySet(), Collections.singleton(conf.getClusterName()));
-        admin.tenants().createTenant("public", tenantInfo);
-        admin.namespaces().createNamespace("public/default");
+    }
+
+    @Override
+    protected void doInitConf() throws Exception {
+        super.doInitConf();
+        conf.setAllowAutoTopicCreationType(TopicType.PARTITIONED);
+        conf.setDefaultNumPartitions(1);
     }
 
     @Override
@@ -377,13 +390,42 @@ public class ProxyTest extends MockedPulsarServiceBaseTest {
     }
 
     @Test
+    public void testGetPartitionedMetadataErrorCode() throws Exception {
+        final String topic = BrokerTestUtil.newUniqueName("persistent://public/default/tp");
+        // Trigger partitioned metadata creation.
+        PulsarClientImpl brokerClient = (PulsarClientImpl) pulsarClient;
+        PartitionedTopicMetadata brokerMetadata =
+                brokerClient.getPartitionedTopicMetadata(topic, true, true).get();
+        assertEquals(brokerMetadata.partitions, 1);
+        assertEquals(pulsar.getPulsarResources().getNamespaceResources().getPartitionedTopicResources()
+                .getPartitionedTopicMetadataAsync(TopicName.get(topic)).get().get().partitions, 1);
+        // Verify: Proxy never rewrite error code.
+        ClientConfigurationData proxyClientConf = new ClientConfigurationData();
+        proxyClientConf.setServiceUrl(proxyService.getServiceUrl());
+        PulsarClientImpl proxyClient =
+                (PulsarClientImpl) getClientActiveConsumerChangeNotSupported(proxyClientConf);
+        PartitionedTopicMetadata proxyMetadata =
+                proxyClient.getPartitionedTopicMetadata(topic, false, false).get();
+        assertEquals(proxyMetadata.partitions, 1);
+        try {
+            proxyClient.getPartitionedTopicMetadata(topic + "-partition-0", false, false).get();
+            fail("expected a TopicDoesNotExistException");
+        } catch (Exception ex) {
+            assertTrue(FutureUtil.unwrapCompletionException(ex)
+                    instanceof PulsarClientException.TopicDoesNotExistException);
+        }
+        // cleanup.
+        proxyClient.close();
+        admin.topics().deletePartitionedTopic(topic);
+    }
+
+    @Test
     public void testGetClientVersion() throws Exception {
         @Cleanup
         PulsarClient client = PulsarClient.builder().serviceUrl(proxyService.getServiceUrl())
                 .build();
 
-        String topic = "persistent://sample/test/local/testGetClientVersion";
-        String subName = "test-sub";
+        String topic = BrokerTestUtil.newUniqueName("persistent://sample/test/local/testGetClientVersion");        String subName = "test-sub";
 
         @Cleanup
         Consumer<byte[]> consumer = client.newConsumer()
@@ -393,8 +435,9 @@ public class ProxyTest extends MockedPulsarServiceBaseTest {
 
         consumer.receiveAsync();
 
-        Assert.assertEquals(admin.topics().getStats(topic).getSubscriptions().get(subName).getConsumers()
-            .get(0).getClientVersion(), String.format("Pulsar-Java-v%s", PulsarVersion.getVersion()));
+        String partition = TopicName.get(topic).getPartition(0).toString();
+        assertEquals(admin.topics().getStats(partition).getSubscriptions().get(subName).getConsumers()
+                .get(0).getClientVersion(), String.format("Pulsar-Java-v%s", PulsarVersion.getVersion()));
     }
 
     @DataProvider
