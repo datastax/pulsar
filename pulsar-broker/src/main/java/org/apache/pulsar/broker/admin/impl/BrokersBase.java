@@ -48,7 +48,6 @@ import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
-import org.apache.commons.lang.StringUtils;
 import org.apache.pulsar.PulsarVersion;
 import org.apache.pulsar.broker.PulsarServerException;
 import org.apache.pulsar.broker.PulsarService;
@@ -385,16 +384,17 @@ public class BrokersBase extends AdminResource {
         @ApiResponse(code = 307, message = "Current broker is not the target broker"),
         @ApiResponse(code = 403, message = "Don't have admin permission"),
         @ApiResponse(code = 404, message = "Cluster doesn't exist"),
-        @ApiResponse(code = 500, message = "Internal server error")})
+        @ApiResponse(code = 500, message = "Internal server error"),
+        @ApiResponse(code = 503, message = "Service unavailable")})
     public void healthCheck(@Suspended AsyncResponse asyncResponse,
                             @ApiParam(value = "Topic Version")
-                            @QueryParam("topicVersion") TopicVersion topicVersion,
-                            @QueryParam("brokerId") String brokerId) {
-        validateBothSuperuserAndBrokerOperation(pulsar().getConfig().getClusterName(), StringUtils.isBlank(brokerId)
-                ? pulsar().getBrokerId() : brokerId, BrokerOperation.HEALTH_CHECK)
+                            @QueryParam("topicVersion") TopicVersion topicVersion) {
+        if (pulsar().getState() == State.Closed || pulsar().getState() == State.Closing) {
+            asyncResponse.resume(Response.status(Status.SERVICE_UNAVAILABLE).build());
+            return;
+        }
+        validateSuperUserAccessAsync()
                 .thenAccept(__ -> checkDeadlockedThreads())
-                .thenCompose(__ -> maybeRedirectToBroker(
-                        StringUtils.isBlank(brokerId) ? pulsar().getBrokerId() : brokerId))
                 .thenCompose(__ -> internalRunHealthCheck(topicVersion))
                 .thenAccept(__ -> {
                     LOG.info("[{}] Successfully run health check.", clientAppId());
@@ -440,7 +440,7 @@ public class BrokersBase extends AdminResource {
     }
 
     private CompletableFuture<Void> internalRunHealthCheck(TopicVersion topicVersion) {
-        return internalRunHealthCheck(topicVersion, pulsar(), clientAppId());
+        return pulsar().runHealthCheck(topicVersion, clientAppId());
     }
 
 
