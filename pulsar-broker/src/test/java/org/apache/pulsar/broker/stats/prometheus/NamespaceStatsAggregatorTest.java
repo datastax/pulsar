@@ -21,6 +21,7 @@ package org.apache.pulsar.broker.stats.prometheus;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 import java.util.List;
+import lombok.Cleanup;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.bookkeeper.mledger.ManagedLedger;
@@ -103,6 +104,7 @@ public class NamespaceStatsAggregatorTest {
         PersistentTopicMetrics persistentTopicMetrics = new PersistentTopicMetrics();
         when(topic.getPersistentTopicMetrics()).thenReturn(persistentTopicMetrics);
         topicsMap.put("my-topic", topic);
+        @Cleanup("releaseAll")
         PrometheusMetricStreams metricStreams = Mockito.spy(new PrometheusMetricStreams());
 
         // Populate subscriptions stats

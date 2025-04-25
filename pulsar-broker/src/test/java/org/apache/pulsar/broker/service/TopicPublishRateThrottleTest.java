@@ -20,6 +20,7 @@ package org.apache.pulsar.broker.service;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.broker.BrokerTestUtil;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.MessageId;
@@ -31,6 +32,7 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 @Test(groups = "broker")
+@Slf4j
 public class TopicPublishRateThrottleTest extends BrokerTestBase{
 
     @BeforeMethod(alwaysRun = true)
@@ -71,6 +73,8 @@ public class TopicPublishRateThrottleTest extends BrokerTestBase{
         } catch (TimeoutException e) {
             // No-op
         }
+        // Close the PulsarClient gracefully to avoid ByteBuf leak
+        pulsarClient.close();
     }
 
     @Test
@@ -122,6 +126,8 @@ public class TopicPublishRateThrottleTest extends BrokerTestBase{
             // No-op
         }
         Assert.assertNotNull(messageId);
+        // Close the PulsarClient gracefully to avoid ByteBuf leak
+        pulsarClient.close();
     }
 
     @Test
