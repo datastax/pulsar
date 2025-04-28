@@ -76,7 +76,6 @@ import org.apache.pulsar.common.util.ThreadDumpUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 /**
  * Broker admin base.
  */
@@ -86,7 +85,7 @@ public class BrokersBase extends AdminResource {
     // log a full thread dump when a deadlock is detected in healthcheck once every 10 minutes
     // to prevent excessive logging
     private static final long LOG_THREADDUMP_INTERVAL_WHEN_DEADLOCK_DETECTED = 600000L;
-     // there is a timeout of 60 seconds default in the client(readTimeoutMs), so we need to set the timeout
+    // there is a timeout of 60 seconds default in the client(readTimeoutMs), so we need to set the timeout
     // a bit shorter than 60 seconds to avoid the client timeout exception thrown before the server timeout exception.
     // or we can't propagate the server timeout exception to the client.
     private static final Duration HEALTH_CHECK_READ_TIMEOUT = Duration.ofSeconds(58);
@@ -386,8 +385,7 @@ public class BrokersBase extends AdminResource {
         @ApiResponse(code = 307, message = "Current broker is not the target broker"),
         @ApiResponse(code = 403, message = "Don't have admin permission"),
         @ApiResponse(code = 404, message = "Cluster doesn't exist"),
-        @ApiResponse(code = 500, message = "Internal server error"),
-        @ApiResponse(code = 503, message = "Service unavailable")})
+        @ApiResponse(code = 500, message = "Internal server error")})
     public void healthCheck(@Suspended AsyncResponse asyncResponse,
                             @ApiParam(value = "Topic Version")
                             @QueryParam("topicVersion") TopicVersion topicVersion,
