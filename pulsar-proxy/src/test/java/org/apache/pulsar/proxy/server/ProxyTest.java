@@ -447,11 +447,11 @@ public class ProxyTest extends MockedPulsarServiceBaseTest {
                 proxyClient.getPartitionedTopicMetadata(topic, false, false).get();
         assertEquals(proxyMetadata.partitions, 1);
         try {
-            proxyClient.getPartitionedTopicMetadata(topic + "-partition-0", false, false).get();
-            fail("expected a TopicDoesNotExistException");
+            brokerClient.getPartitionedTopicMetadata(topic + "-partition-0", false, false).get();
+            fail("expected a topic NotFoundException");
         } catch (Exception ex) {
             assertTrue(FutureUtil.unwrapCompletionException(ex)
-                    instanceof PulsarClientException.TopicDoesNotExistException);
+                    instanceof PulsarClientException.NotFoundException);
         }
         // cleanup.
         proxyClient.close();
