@@ -39,6 +39,7 @@ import org.apache.pulsar.client.api.ProducerConsumerBase;
 import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.api.interceptor.ProducerInterceptor;
+import org.apache.pulsar.common.policies.data.SchemaCompatibilityStrategy;
 import org.apache.pulsar.common.protocol.ByteBufPair;
 import org.apache.pulsar.common.util.FutureUtil;
 import org.awaitility.Awaitility;
@@ -52,11 +53,16 @@ import org.testng.annotations.Test;
 @Test(groups = "broker-api")
 public class ProducerMemoryLeakTest extends ProducerConsumerBase {
 
+    private static final String NAMESPACE_NEVER_COMPATIBLE = "public/schema-never-compatible";
+
     @BeforeClass(alwaysRun = true)
     @Override
     protected void setup() throws Exception {
         super.internalSetup();
         super.producerBaseSetup();
+        admin.namespaces().createNamespace(NAMESPACE_NEVER_COMPATIBLE);
+        admin.namespaces().setSchemaCompatibilityStrategy(NAMESPACE_NEVER_COMPATIBLE,
+                SchemaCompatibilityStrategy.ALWAYS_INCOMPATIBLE);
     }
 
     @AfterClass(alwaysRun = true)
@@ -337,7 +343,11 @@ public class ProducerMemoryLeakTest extends ProducerConsumerBase {
     }
 
     private <T> MsgPayloadTouchableMessageBuilder<T> newMessage(ProducerImpl<T> producer){
-        return new MsgPayloadTouchableMessageBuilder<T>(producer, producer.schema);
+        return newMessage(producer, producer.schema);
+    }
+
+    private <T> MsgPayloadTouchableMessageBuilder<T> newMessage(ProducerImpl<T> producer, Schema<T> schema){
+        return new MsgPayloadTouchableMessageBuilder<T>(producer, schema);
     }
 
     private static class MsgPayloadTouchableMessageBuilder<T> extends TypedMessageBuilderImpl {
