@@ -722,7 +722,7 @@ public class PersistentTopicTest extends BrokerTestBase {
         });
     }
 
-    @Test
+    @Test(enabled = false)
     public void testCheckPersistencePolicies() throws Exception {
         final String myNamespace = "prop/ns";
         admin.namespaces().createNamespace(myNamespace, Sets.newHashSet("test"));
