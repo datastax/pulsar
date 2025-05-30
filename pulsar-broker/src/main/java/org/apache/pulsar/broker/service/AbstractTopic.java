@@ -1298,6 +1298,9 @@ public abstract class AbstractTopic implements Topic, TopicPolicyListener<TopicP
     }
 
     public CompletableFuture<Void> deleteTopicPolicies() {
+        if (TopicName.get(getName()).isPartitioned()) {
+            return CompletableFuture.completedFuture(null);
+        }
         return brokerService.deleteTopicPolicies(TopicName.get(topic));
     }
 
