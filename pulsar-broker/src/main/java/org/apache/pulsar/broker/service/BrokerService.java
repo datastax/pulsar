@@ -1629,7 +1629,7 @@ public class BrokerService implements Closeable {
                         });
                     } else {
                         pendingTopicLoadingQueue.add(new TopicLoadingContext(topic,
-                                createIfMissing, topicFuture, properties));
+                                topicFuture, properties));
                         if (log.isDebugEnabled()) {
                             log.debug("topic-loading for {} added into pending queue", topic);
                         }
@@ -3215,7 +3215,7 @@ public class BrokerService implements Closeable {
             final Semaphore topicLoadSemaphore = topicLoadRequestSemaphore.get();
             final boolean acquiredPermit = topicLoadSemaphore.tryAcquire();
             checkOwnershipAndCreatePersistentTopic(topic,
-                    pendingTopic.isCreateIfMissing(),
+                    true,
                     pendingFuture,
                     pendingTopic.getProperties());
             pendingFuture.handle((persistentTopic, ex) -> {
@@ -3822,7 +3822,6 @@ public class BrokerService implements Closeable {
     @Getter
     private static class TopicLoadingContext {
         private final String topic;
-        private final boolean createIfMissing;
         private final CompletableFuture<Optional<Topic>> topicFuture;
         private final Map<String, String> properties;
     }
