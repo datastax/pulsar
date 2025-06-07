@@ -92,25 +92,13 @@ import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.admin.PulsarAdminException.PreconditionFailedException;
 import org.apache.pulsar.client.admin.Topics.QueryParam;
-import org.apache.pulsar.client.api.Consumer;
-import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.api.MessageRouter;
-import org.apache.pulsar.client.api.MessageRoutingMode;
-import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.ProducerAccessMode;
-import org.apache.pulsar.client.api.ProxyProtocol;
-import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.PulsarClientException;
-import org.apache.pulsar.client.api.Schema;
-import org.apache.pulsar.client.api.SubscriptionInitialPosition;
-import org.apache.pulsar.client.api.SubscriptionType;
-import org.apache.pulsar.client.api.TopicMetadata;
+import org.apache.pulsar.client.api.*;
 import org.apache.pulsar.client.impl.MessageIdImpl;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicDomain;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.*;
+import org.apache.pulsar.common.policies.data.ConsumerStats;
 import org.apache.pulsar.common.policies.data.impl.BacklogQuotaImpl;
 import org.apache.pulsar.common.protocol.schema.SchemaData;
 import org.apache.pulsar.common.util.collections.ConcurrentOpenHashMap;
@@ -1876,12 +1864,12 @@ public class AdminApi2Test extends MockedPulsarServiceBaseTest {
         @Cleanup
         final PulsarClient client = PulsarClient.builder().serviceUrl(pulsar.getWebServiceAddress()).build();
 
-        @Cleanup
-        final Consumer<byte[]> consumer = client.newConsumer()
+        ConsumerBuilder<byte[]> consumerBuilder = client.newConsumer()
                 .topic(topic)
-                .subscriptionName(subName)
-                .consumerName(consumerName)
-                .subscribe();
+                .subscriptionName(subName);
+
+        @Cleanup
+        final Consumer<byte[]> consumer = consumerBuilder.consumerName(consumerName).subscribe();
 
         final TopicStats topicStats = admin.topics().getPartitionedStats(topic, false);
 
