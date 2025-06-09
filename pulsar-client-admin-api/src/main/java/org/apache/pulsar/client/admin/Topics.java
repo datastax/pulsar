@@ -1348,7 +1348,7 @@ public interface Topics {
             throws PulsarAdminException;
 
     default PartitionedTopicStats getPartitionedStats(String topic, boolean perPartition) throws PulsarAdminException {
-        return getPartitionedStats(topic, perPartition, false, false, false);
+        return getPartitionedStats(topic, perPartition, false, true, false);
     }
 
     /**
