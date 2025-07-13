@@ -29,7 +29,7 @@
     </parent>
 
     <properties>
-        <solr.version>8.11.1</solr.version>
+        <solr.version>9.0.0</solr.version>
     </properties>
 
     <artifactId>pulsar-io-solr</artifactId>
@@ -65,7 +65,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.4</version>
+            <version>3.18.0</version>
         </dependency>
         <dependency>
             <groupId>commons-collections</groupId>
