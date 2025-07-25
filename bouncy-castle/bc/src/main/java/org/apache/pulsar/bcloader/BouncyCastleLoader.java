@@ -26,7 +26,7 @@ import org.apache.pulsar.common.util.BCLoader;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 /**
- * This is a Bouncy Castle provider Loader.
+ * This is a Bouncy Castle provider Loader. Test comment
  */
 @Slf4j
 public class BouncyCastleLoader implements BCLoader {
