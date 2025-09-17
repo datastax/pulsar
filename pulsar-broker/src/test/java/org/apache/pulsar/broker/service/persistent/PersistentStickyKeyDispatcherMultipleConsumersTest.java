@@ -42,6 +42,7 @@ import com.google.common.collect.BoundType;
 import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
@@ -109,6 +110,7 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
     private PersistentTopic topicMock;
     private PersistentSubscription subscriptionMock;
     private ServiceConfiguration configMock;
+    private ChannelPromise channelMock;
     private Future<Void> succeededFuture;
     private OrderedExecutor orderedExecutor;
 
@@ -196,6 +198,17 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
         doReturn(ledgerMock).when(cursorMock).getManagedLedger();
 
         consumerMock = createMockConsumer();
+        channelMock = mock(ChannelPromise.class);
+        doReturn(channelMock).when(consumerMock).sendMessages(
+                anyList(),
+                any(EntryBatchSizes.class),
+                any(EntryBatchIndexesAcks.class),
+                anyInt(),
+                anyLong(),
+                anyLong(),
+                any(RedeliveryTracker.class)
+        );
+
         EventExecutor eventExecutor = mock(EventExecutor.class);
         doAnswer(invocation -> {
             orderedExecutor.execute(invocation.getArgument(0, Runnable.class));

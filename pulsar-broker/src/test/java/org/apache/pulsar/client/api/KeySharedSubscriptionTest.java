@@ -1391,7 +1391,7 @@ public class KeySharedSubscriptionTest extends ProducerConsumerBase {
         // create expected values
         final PositionImpl expectedLastSentPosition = ledger.getNextValidPosition((PositionImpl) cursor.getMarkDeletedPosition());
         final ConcurrentOpenLongPairRangeSet<PositionImpl>
-                expectedIndividuallySentPositions =  new ConcurrentOpenLongPairRangeSet<>(4096, PositionFactory::create);
+                expectedIndividuallySentPositions =  new ConcurrentOpenLongPairRangeSet<>(4096, PositionImpl::get);
         cursor.getIndividuallyDeletedMessagesSet().forEach(range -> {
             final PositionImpl lower = range.lowerEndpoint();
             final PositionImpl upper = range.upperEndpoint();
