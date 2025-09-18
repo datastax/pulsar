@@ -34,8 +34,8 @@ import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-import lombok.Setter;
 import javax.annotation.Nullable;
+import lombok.Setter;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
 import org.apache.bookkeeper.mledger.Position;
@@ -164,9 +164,10 @@ public class PersistentStickyKeyDispatcherMultipleConsumers extends PersistentDi
                         if (recentlyJoinedConsumers != null
                                 && consumerList.size() > 1
                                 && cursor.getNumberOfEntriesSinceFirstNotAckedMessage() > 1
-                                // If there is a delayed "cursor.rewind" after the pending read, the consumers that will be
-                                // added before the "cursor.rewind" will have a same "recent joined position", which is the
-                                // same as "mark deleted position +1", so we can skip this adding.
+                                // If there is a delayed "cursor.rewind" after the pending read,
+                                // the consumers that will be added before the "cursor.rewind" will have a same
+                                // "recent joined position", which is the same as "mark deleted position +1",
+                                // so we can skip this adding.
                                 && !shouldRewindBeforeReadingOrReplaying) {
                             recentlyJoinedConsumers.put(consumer, lastSentPositionWhenJoining);
                             sortRecentlyJoinedConsumersIfNeeded();
@@ -455,7 +456,8 @@ public class PersistentStickyKeyDispatcherMultipleConsumers extends PersistentDi
                     // eg: (2:10..3:15] can be returned as (2:10..2:15],[3:0..3:15].
                     // So, try to iterate over connected range and found the last non-connected range
                     // which gives new last sent position.
-                    final PositionImpl lastConfirmedEntrySnapshot = (PositionImpl) managedLedger.getLastConfirmedEntry();
+                    final PositionImpl lastConfirmedEntrySnapshot =
+                            (PositionImpl) managedLedger.getLastConfirmedEntry();
                     if (lastConfirmedEntrySnapshot != null) {
                         while (positionAfterNewLastSent.compareTo(lastConfirmedEntrySnapshot) <= 0) {
                             if (individuallySentPositions.contains(positionAfterNewLastSent.getLedgerId(),
@@ -542,7 +544,8 @@ public class PersistentStickyKeyDispatcherMultipleConsumers extends PersistentDi
         // But the message [2,3] should not dispatch to consumer2.
 
         if (readType == ReadType.Replay) {
-            PositionImpl minLastSentPositionForRecentJoinedConsumer = recentlyJoinedConsumers.values().iterator().next();
+            PositionImpl minLastSentPositionForRecentJoinedConsumer =
+                    recentlyJoinedConsumers.values().iterator().next();
             if (minLastSentPositionForRecentJoinedConsumer != null
                     && minLastSentPositionForRecentJoinedConsumer.compareTo(maxLastSentPosition) < 0) {
                 maxLastSentPosition = minLastSentPositionForRecentJoinedConsumer;
