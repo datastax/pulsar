@@ -33,7 +33,7 @@
 
   <properties>
     <skipBuildDistribution>false</skipBuildDistribution>
-    <jersey.version>2.34</jersey.version>
+    <jersey.version>2.46</jersey.version>
     <presto.version>334</presto.version>
     <objenesis.version>2.6</objenesis.version>
     <objectsize.version>0.0.12</objectsize.version>
