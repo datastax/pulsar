@@ -196,7 +196,7 @@ public class PulsarMockBookKeeper extends BookKeeper {
     @Override
     public void asyncOpenLedger(long lId, DigestType digestType, byte[] passwd, OpenCallback cb,
         Object ctx, boolean keepUpdateMetadata) {
-          asyncOpenLedger(lId, digestType, passwd,cb,ctx);
+          asyncOpenLedger(lId, digestType, passwd, cb, ctx);
     }
 
     @Override
