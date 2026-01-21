@@ -32,7 +32,7 @@
   <groupId>com.datastax.oss</groupId>
   <artifactId>pulsar</artifactId>
 
-  <version>4.0.7.3-SNAPSHOT</version>
+  <version>4.0.9-SNAPSHOT</version>
 
   <name>Pulsar</name>
   <description>Pulsar is a distributed pub-sub messaging platform with a very
@@ -649,6 +649,11 @@ flexible messaging model and an intuitive client API.</description>
           <exclusion>
             <groupId>commons-collections</groupId>
             <artifactId>commons-collections</artifactId>
+          </exclusion>
+          <!-- this can be removed after upgrading OpenTelemetry to version 1.52.0 or higher -->
+          <exclusion>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-common</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
