@@ -1784,7 +1784,7 @@ public class ExtensibleLoadManagerImplTest extends ExtensibleLoadManagerImplBase
                 .get(3, TimeUnit.SECONDS);
     }
 
-    @Test
+    @Test(priority = Integer.MIN_VALUE)
     public void testGetMetrics() throws Exception {
         {
             ServiceConfiguration conf = getDefaultConf();
