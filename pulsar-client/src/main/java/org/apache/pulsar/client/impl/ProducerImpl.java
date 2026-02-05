@@ -328,7 +328,7 @@ public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, Conne
         return connectionHandler;
     }
 
-    private boolean isBatchMessagingEnabled() {
+    public boolean isBatchMessagingEnabled() {
         return conf.isBatchingEnabled();
     }
 
@@ -1720,11 +1720,12 @@ public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, Conne
             messagesCount.set(0);
         }
 
-        public void remove() {
+        public OpSendMsg remove() {
             OpSendMsg op = delegate.remove();
             if (op != null) {
                 messagesCount.addAndGet(-op.numMessagesInBatch);
             }
+            return op;
         }
 
         public OpSendMsg peek() {
@@ -2194,14 +2195,20 @@ public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, Conne
     }
 
     /**
-     * This fails and clears the pending messages with the given exception. This method should be called from within the
-     * ProducerImpl object mutex.
+     * This fails the pending messages at the start of the call, without dropping newly enqueued
+     * retry messages. This method should be called from within the ProducerImpl object mutex.
      */
-    private synchronized void failPendingMessages(ClientCnx cnx, PulsarClientException ex) {
+    @VisibleForTesting
+    synchronized void failPendingMessages(ClientCnx cnx, PulsarClientException ex) {
         if (cnx == null) {
             final AtomicInteger releaseCount = new AtomicInteger();
             final boolean batchMessagingEnabled = isBatchMessagingEnabled();
-            pendingMessages.forEach(op -> {
+            // Track message count to fail so that newly added messages by synchronous retries
+            // triggered by op.sendComplete(ex); don't get removed
+            int pendingMessagesToFailCount = pendingMessages.size();
+
+            for (int i = 0; i < pendingMessagesToFailCount; i++) {
+                OpSendMsg op = pendingMessages.remove();
                 releaseCount.addAndGet(batchMessagingEnabled ? op.numMessagesInBatch : 1);
                 try {
                     // Need to protect ourselves from any exception being thrown in the future handler from the
@@ -2220,9 +2227,8 @@ public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, Conne
                 client.getMemoryLimitController().releaseMemory(op.uncompressedSize);
                 ReferenceCountUtil.safeRelease(op.cmd);
                 op.recycle();
-            });
+            }
 
-            pendingMessages.clear();
             semaphoreRelease(releaseCount.get());
             if (batchMessagingEnabled) {
                 failPendingBatchMessages(ex);
