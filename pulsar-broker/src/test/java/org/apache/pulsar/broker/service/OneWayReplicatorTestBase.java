@@ -72,6 +72,7 @@ public abstract class OneWayReplicatorTestBase extends TestRetrySupport {
     protected final String defaultTenant = "public";
     protected final String replicatedNamespace = defaultTenant + "/default";
     protected final String nonReplicatedNamespace = defaultTenant + "/ns1";
+    protected final String sourceClusterAlwaysSchemaCompatibleNamespace = defaultTenant + "/always-compatible";
 
     protected final String cluster1 = "r1";
 

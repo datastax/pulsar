@@ -538,14 +538,4 @@ public class ProxyService implements Closeable {
             topicStats.clear();
         }
     }
-
-    public void setProxyLogLevel(int proxyLogLevel) {
-        this.proxyLogLevel = proxyLogLevel;
-        // clear the topic stats when proxy log level is changed to < 2
-        // this is a way to avoid the proxy consuming too much memory when there are a lot of topics and log level
-        // has been temporarily set to 2
-        if (proxyLogLevel < 2) {
-            topicStats.clear();
-        }
-    }
 }
