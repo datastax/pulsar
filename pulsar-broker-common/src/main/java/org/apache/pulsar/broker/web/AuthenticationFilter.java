@@ -50,27 +50,36 @@ public class AuthenticationFilter implements Filter {
     }
 
     @Override
-    public void doFilter(
-            ServletRequest request, ServletResponse response, FilterChain chain
-    ) throws IOException, ServletException {
-        final HttpServletRequest httpRequest = (HttpServletRequest) request;
-        final HttpServletResponse httpResponse = (HttpServletResponse) response;
-
-        final boolean doFilter;
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        boolean allowed = false;
+        Exception authenticationException = null;
         try {
-            doFilter = authenticationService.authenticateHttpRequest(httpRequest, httpResponse);
+            allowed = authenticationService
+                    .authenticateHttpRequest((HttpServletRequest) request, (HttpServletResponse) response);
         } catch (Exception e) {
-            httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication required");
-            if (e instanceof AuthenticationException) {
-                LOG.warn("[{}] Failed to authenticate HTTP request: {}", request.getRemoteAddr(), e.getMessage());
-            } else {
-                LOG.error("[{}] Error performing authentication for HTTP", request.getRemoteAddr(), e);
-            }
+            authenticationException = e;
+        }
+
+        if (allowed) {
+            chain.doFilter(request, response);
             return;
         }
 
-        if (doFilter) {
-            chain.doFilter(request, response);
+        if (authenticationException != null) {
+            HttpServletResponse httpResponse = (HttpServletResponse) response;
+            if (authenticationException instanceof AuthenticationException) {
+                String msg = authenticationException.getMessage();
+                if (msg == null) {
+                    msg = "Authentication required";
+                }
+                httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, msg);
+                LOG.warn("[{}] Failed to authenticate HTTP request: {}", request.getRemoteAddr(), msg);
+            } else {
+                httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication required");
+                LOG.error("[{}] Error performing authentication for HTTP", request.getRemoteAddr(),
+                        authenticationException);
+            }
         }
     }
 
