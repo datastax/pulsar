@@ -177,8 +177,8 @@ flexible messaging model and an intuitive client API.</description>
     <!-- apache commons -->
     <commons-compress.version>1.28.0</commons-compress.version>
 
-    <datastax.bookkeeper.version>4.17.1.0.0.4</datastax.bookkeeper.version>
-    <apache.bookkeeper.version>4.17.2</apache.bookkeeper.version>
+    <datastax.bookkeeper.version>4.17.1.0.0.5</datastax.bookkeeper.version>
+    <apache.bookkeeper.version>4.17.3</apache.bookkeeper.version>
     <zookeeper.version>3.9.4</zookeeper.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <commons-text.version>1.14.0</commons-text.version>
@@ -285,7 +285,7 @@ flexible messaging model and an intuitive client API.</description>
     <jakarta.validation.version>2.0.2</jakarta.validation.version>
     <jna.version>5.12.1</jna.version>
     <kubernetesclient.version>18.0.0</kubernetesclient.version>
-    <jose4j.version>0.9.4</jose4j.version>
+    <jose4j.version>0.9.6</jose4j.version>
     <okhttp3.version>5.3.1</okhttp3.version>
     <!-- use okio version that matches the okhttp3 version -->
     <okio.version>3.16.3</okio.version>
