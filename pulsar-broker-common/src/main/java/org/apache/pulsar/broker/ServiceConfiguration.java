@@ -4038,6 +4038,10 @@ public class ServiceConfiguration implements PulsarConfiguration {
                 ? numWorkerThreadsForNonPersistentTopic : topicOrderedExecutorThreadNum;
     }
 
+    public int getHttpServerIdleTimeout() {
+        return httpServerIdleTimeout;
+    }
+
     public Map<String, String> lookupProperties() {
         final var map = new HashMap<String, String>();
         properties.forEach((key, value) -> {

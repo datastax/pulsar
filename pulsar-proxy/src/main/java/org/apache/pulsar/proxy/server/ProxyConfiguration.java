@@ -1076,4 +1076,8 @@ public class ProxyConfiguration implements PulsarConfiguration {
     public boolean isMetadataStoreAllowReadOnlyOperations() {
         return zooKeeperAllowReadOnlyOperations || metadataStoreAllowReadOnlyOperations;
     }
+
+    public int getHttpServerIdleTimeout() {
+        return httpServerIdleTimeout;
+    }
 }
