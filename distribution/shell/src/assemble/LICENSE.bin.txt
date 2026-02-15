@@ -338,11 +338,11 @@ The Apache Software License, Version 2.0
     - memory-0.8.3.jar
     - sketches-core-0.8.3.jar
  * Apache Commons
-    - commons-codec-1.18.0.jar
-    - commons-io-2.19.0.jar
-    - commons-lang3-3.18.0.jar
-    - commons-text-1.13.1.jar
-    - commons-compress-1.27.1.jar
+    - commons-codec-1.20.0.jar
+    - commons-io-2.21.0.jar
+    - commons-lang3-3.19.0.jar
+    - commons-text-1.14.0.jar
+    - commons-compress-1.28.0.jar
  * Netty
     - netty-buffer-4.1.130.Final.jar
     - netty-codec-4.1.130.Final.jar
@@ -385,14 +385,15 @@ The Apache Software License, Version 2.0
     - log4j-slf4j2-impl-2.25.3.jar
     - log4j-web-2.25.3.jar
  * OpenTelemetry
-    - opentelemetry-api-1.45.0.jar
-    - opentelemetry-api-incubator-1.45.0-alpha.jar
-    - opentelemetry-context-1.45.0.jar
+    - opentelemetry-api-1.56.0.jar
+    - opentelemetry-api-incubator-1.56.0-alpha.jar
+    - opentelemetry-common-1.56.0.jar
+    - opentelemetry-context-1.56.0.jar
 
  * BookKeeper
-    - bookkeeper-common-allocator-4.17.1.0.0.4.jar
-    - cpu-affinity-4.17.1.0.0.4.jar
-    - circe-checksum-4.17.1.0.0.4.jar
+    - bookkeeper-common-allocator-4.17.1.0.0.5.jar
+    - cpu-affinity-4.17.1.0.0.5.jar
+    - circe-checksum-4.17.1.0.0.5.jar
   * AirCompressor
      - aircompressor-0.27.jar
  * AsyncHttpClient

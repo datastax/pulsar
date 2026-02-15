@@ -39,7 +39,7 @@
 
   <dependencyManagement>
     <dependencies>
-      <!-- enforce kafka client version that gets pulled transitively  -->
+      <!-- enforce kafka client version that gets pulled transitively -->
       <dependency>
         <groupId>org.apache.kafka</groupId>
         <artifactId>kafka-clients</artifactId>

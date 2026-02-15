@@ -347,6 +347,12 @@ public class ServiceConfiguration implements PulsarConfiguration {
     )
     private int httpServerAcceptQueueSize = 8192;
 
+    @FieldContext(
+            category = CATEGORY_HTTP,
+            doc = "Idle timeout for HTTP server connections in milliseconds."
+    )
+    private int httpServerIdleTimeout = 30 * 1000;
+
     @FieldContext(category = CATEGORY_SERVER, doc = "Maximum number of inbound http connections. "
             + "(0 to disable limiting)")
     private int maxHttpServerConnections = 2048;
@@ -1736,6 +1742,14 @@ public class ServiceConfiguration implements PulsarConfiguration {
         doc = "Enable authentication"
     )
     private boolean authenticationEnabled = false;
+
+    @FieldContext(
+        category = CATEGORY_AUTHENTICATION,
+        doc = "Strictly enforce authentication method. If specified, Pulsar will only attempt to authenticate with "
+                + "the provided method. If no method is provided, authentication fails."
+    )
+    private boolean strictAuthMethod = false;
+
     @FieldContext(
         category = CATEGORY_AUTHENTICATION,
         doc = "Authentication provider name list, which is a list of class names"
@@ -4016,6 +4030,10 @@ public class ServiceConfiguration implements PulsarConfiguration {
     public int getTopicOrderedExecutorThreadNum() {
         return numWorkerThreadsForNonPersistentTopic > 0
                 ? numWorkerThreadsForNonPersistentTopic : topicOrderedExecutorThreadNum;
+    }
+
+    public int getHttpServerIdleTimeout() {
+        return httpServerIdleTimeout;
     }
 
     public Map<String, String> lookupProperties() {
