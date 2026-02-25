@@ -300,7 +300,7 @@ The Apache Software License, Version 2.0
   * Bytecode
     - bytecode-1.2.jar
   * Airlift
-    - aircompressor-0.27.jar
+    - aircompressor-2.0.3.jar
     - bootstrap-213.jar
     - concurrent-213.jar
     - configuration-213.jar
