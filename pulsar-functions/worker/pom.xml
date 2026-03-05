@@ -109,7 +109,7 @@
     </dependency>
 
     <dependency>
-      <groupId>org.apache.distributedlog</groupId>
+      <groupId>com.datastax.oss</groupId>
       <artifactId>distributedlog-core</artifactId>
       <exclusions>
         <exclusion>
@@ -120,8 +120,15 @@
     </dependency>
 
     <dependency>
-      <groupId>org.apache.bookkeeper</groupId>
+      <groupId>com.datastax.oss</groupId>
       <artifactId>bookkeeper-server</artifactId>
+      <!-- Exclude log4j-slf4j2-impl from bookkeeper since slf4j.version is currently 1.7.32 -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-slf4j2-impl</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
