@@ -349,7 +349,7 @@ The Apache Software License, Version 2.0
   * Log4j
     - log4j-api-2.25.3.jar
     - log4j-core-2.25.3.jar
-    - log4j-slf4j-impl-2.25.3.jar
+    - log4j-slf4j2-impl-2.25.3.jar
   * Log4j implemented over SLF4J
     - log4j-over-slf4j-1.7.32.jar
   * Lucene Common Analyzers
@@ -423,21 +423,21 @@ The Apache Software License, Version 2.0
     - async-http-client-2.12.4.jar
     - async-http-client-netty-utils-2.12.4.jar
   * Apache Bookkeeper
-    - bookkeeper-common-4.16.7.jar
-    - bookkeeper-common-allocator-4.16.7.jar
-    - bookkeeper-proto-4.16.7.jar
-    - bookkeeper-server-4.16.7.jar
-    - bookkeeper-stats-api-4.16.7.jar
-    - bookkeeper-tools-framework-4.16.7.jar
-    - circe-checksum-4.16.7.jar
-    - codahale-metrics-provider-4.16.7.jar
-    - cpu-affinity-4.16.7.jar
-    - http-server-4.16.7.jar
-    - prometheus-metrics-provider-4.16.7.jar
-    - codahale-metrics-provider-4.16.7.jar
-    - bookkeeper-slogger-api-4.16.7.jar
-    - bookkeeper-slogger-slf4j-4.16.7.jar
-    - native-io-4.16.7.jar
+    - bookkeeper-common-4.16.7.0.0.0.jar
+    - bookkeeper-common-allocator-4.16.7.0.0.0.jar
+    - bookkeeper-proto-4.16.7.0.0.0.jar
+    - bookkeeper-server-4.16.7.0.0.0.jar
+    - bookkeeper-stats-api-4.16.7.0.0.0.jar
+    - bookkeeper-tools-framework-4.16.7.0.0.0.jar
+    - circe-checksum-4.16.7.0.0.0.jar
+    - codahale-metrics-provider-4.16.7.0.0.0.jar
+    - cpu-affinity-4.16.7.0.0.0.jar
+    - http-server-4.16.7.0.0.0.jar
+    - prometheus-metrics-provider-4.16.7.0.0.0.jar
+    - codahale-metrics-provider-4.16.7.0.0.0.jar
+    - bookkeeper-slogger-api-4.16.7.0.0.0.jar
+    - bookkeeper-slogger-slf4j-4.16.7.0.0.0.jar
+    - native-io-4.16.7.0.0.0.jar
   * Apache Commons
     - commons-cli-1.5.0.jar
     - commons-codec-1.15.jar
