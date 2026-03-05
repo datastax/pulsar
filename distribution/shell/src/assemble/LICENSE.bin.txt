@@ -386,9 +386,9 @@ The Apache Software License, Version 2.0
     - log4j-web-2.25.3.jar
 
  * BookKeeper
-    - bookkeeper-common-allocator-4.16.7.jar
-    - cpu-affinity-4.16.7.jar
-    - circe-checksum-4.16.7.jar
+    - bookkeeper-common-allocator-4.16.7.0.0.0.jar
+    - cpu-affinity-4.16.7.0.0.0.jar
+    - circe-checksum-4.16.7.0.0.0.jar
   * AirCompressor
      - aircompressor-0.27.jar
  * AsyncHttpClient
