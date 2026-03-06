@@ -153,9 +153,14 @@ public class ObjectMapperFactory {
     }
 
     private static ObjectMapper createObjectMapperWithIncludeAlways() {
-        return MAPPER_REFERENCE
+        ObjectMapper mapper = MAPPER_REFERENCE
                 .get().getObjectMapper().copy()
                 .setSerializationInclusion(Include.ALWAYS);
+
+        // ensure trailing tokens feature is disabled on the copied mapper
+        mapper.configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, false);
+
+        return mapper;
     }
 
     public static ObjectMapper create() {
