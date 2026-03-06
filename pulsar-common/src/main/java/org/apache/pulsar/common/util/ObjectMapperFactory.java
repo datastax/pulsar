@@ -170,6 +170,7 @@ public class ObjectMapperFactory {
         // forward compatibility for the properties may go away in the future
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         mapper.configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL, true);
+        mapper.configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, false);
         mapper.setSerializationInclusion(Include.NON_NULL);
 
         // enable Jackson Java 8 support modules
