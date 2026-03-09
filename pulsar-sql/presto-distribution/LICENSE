@@ -349,7 +349,6 @@ The Apache Software License, Version 2.0
   * Log4j
     - log4j-api-2.25.3.jar
     - log4j-core-2.25.3.jar
-    - log4j-slf4j-impl-2.25.3.jar
   * Log4j implemented over SLF4J
     - log4j-over-slf4j-1.7.32.jar
   * Lucene Common Analyzers
@@ -469,8 +468,6 @@ The Apache Software License, Version 2.0
     - zookeeper-jute-3.9.4.jar
   * Apache Yetus Audience Annotations
     - audience-annotations-0.12.0.jar
-  * Swagger
-    - swagger-annotations-1.6.10.jar
   * Perfmark
     - perfmark-api-0.26.0.jar
   * Stream Lib
