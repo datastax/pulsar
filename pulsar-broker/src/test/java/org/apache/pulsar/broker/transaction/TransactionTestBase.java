@@ -104,10 +104,17 @@ public abstract class TransactionTestBase extends TestRetrySupport {
         setBrokerCount(numBroker);
         internalSetup();
 
-        String[] brokerServiceUrlArr = getPulsarServiceList().get(0).getBrokerServiceUrl().split(":");
-        String webServicePort = brokerServiceUrlArr[brokerServiceUrlArr.length - 1];
-        admin.clusters().createCluster(CLUSTER_NAME, ClusterData.builder().serviceUrl("http://localhost:"
-                + webServicePort).build());
+        String webServiceUrl = getPulsarServiceList().get(0).getWebServiceAddress();
+
+        if (admin.clusters().getClusters().contains(CLUSTER_NAME)) {
+            admin.clusters().deleteCluster(CLUSTER_NAME);
+        }
+
+        admin.clusters().createCluster(
+                CLUSTER_NAME,
+                ClusterData.builder()
+                        .serviceUrl(webServiceUrl)
+                        .build());
 
         admin.tenants().createTenant(NamespaceName.SYSTEM_NAMESPACE.getTenant(),
                 new TenantInfoImpl(Sets.newHashSet("appid1"), Sets.newHashSet(CLUSTER_NAME)));
