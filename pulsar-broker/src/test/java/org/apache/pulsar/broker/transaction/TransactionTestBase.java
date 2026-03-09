@@ -69,7 +69,6 @@ public abstract class TransactionTestBase extends TestRetrySupport {
 
     public static final String TENANT = "tnx";
     protected static final String NAMESPACE1 = TENANT + "/ns1";
-    protected ServiceConfiguration conf = new ServiceConfiguration();
 
     public void internalSetup() throws Exception {
         incrementSetupNumber();
@@ -100,11 +99,14 @@ public abstract class TransactionTestBase extends TestRetrySupport {
         return builder.build();
     }
 
-    protected void setUpBase(int numBroker, int numPartitionsOfTC, String topic, int numPartitions) throws Exception{
+    protected void setUpBase(int numBroker, int numPartitionsOfTC, String topic, int numPartitions) throws Exception {
         setBrokerCount(numBroker);
         internalSetup();
 
-        String webServiceUrl = getPulsarServiceList().get(0).getWebServiceAddress();
+        PulsarService pulsar = getPulsarServiceList().get(0);
+
+        String webServiceUrl = pulsar.getWebServiceAddress();
+        String brokerServiceUrl = pulsar.getBrokerServiceUrl();
 
         if (admin.clusters().getClusters().contains(CLUSTER_NAME)) {
             admin.clusters().deleteCluster(CLUSTER_NAME);
@@ -114,15 +116,21 @@ public abstract class TransactionTestBase extends TestRetrySupport {
                 CLUSTER_NAME,
                 ClusterData.builder()
                         .serviceUrl(webServiceUrl)
+                        .brokerServiceUrl(brokerServiceUrl)
                         .build());
 
         admin.tenants().createTenant(NamespaceName.SYSTEM_NAMESPACE.getTenant(),
                 new TenantInfoImpl(Sets.newHashSet("appid1"), Sets.newHashSet(CLUSTER_NAME)));
+
         admin.namespaces().createNamespace(NamespaceName.SYSTEM_NAMESPACE.toString());
+
         createTransactionCoordinatorAssign(numPartitionsOfTC);
+
         admin.tenants().createTenant(TENANT,
                 new TenantInfoImpl(Sets.newHashSet("appid1"), Sets.newHashSet(CLUSTER_NAME)));
+
         admin.namespaces().createNamespace(NAMESPACE1, 4);
+
         if (topic != null) {
             if (numPartitions == 0) {
                 admin.topics().createNonPartitionedTopic(topic);
@@ -130,11 +138,13 @@ public abstract class TransactionTestBase extends TestRetrySupport {
                 admin.topics().createPartitionedTopic(topic, numPartitions);
             }
         }
+
         if (pulsarClient != null) {
             pulsarClient.shutdown();
         }
+
         pulsarClient = createNewPulsarClient(PulsarClient.builder()
-                .serviceUrl(getPulsarServiceList().get(0).getBrokerServiceUrl())
+                .serviceUrl(pulsar.getBrokerServiceUrl())
                 .statsInterval(0, TimeUnit.SECONDS)
                 .enableTransaction(true));
     }
@@ -149,6 +159,9 @@ public abstract class TransactionTestBase extends TestRetrySupport {
 
     protected void startBroker() throws Exception {
         for (int i = 0; i < brokerCount; i++) {
+
+            ServiceConfiguration conf = new ServiceConfiguration();
+
             conf.setClusterName(CLUSTER_NAME);
             conf.setAdvertisedAddress("localhost");
             conf.setManagedLedgerCacheSizeMB(8);
@@ -162,15 +175,14 @@ public abstract class TransactionTestBase extends TestRetrySupport {
             conf.setBrokerShutdownTimeoutMs(0L);
             conf.setLoadBalancerOverrideBrokerNicSpeedGbps(Optional.of(1.0d));
             conf.setBrokerServicePort(Optional.of(0));
-            conf.setAdvertisedAddress("localhost");
             conf.setWebServicePort(Optional.of(0));
             conf.setTransactionCoordinatorEnabled(true);
             conf.setBrokerDeduplicationEnabled(true);
             conf.setTransactionBufferSnapshotMaxTransactionCount(2);
             conf.setTransactionBufferSnapshotMinTimeInMillis(2000);
-            // Disable the dispatcher retry backoff in tests by default
             conf.setDispatcherRetryBackoffInitialTimeInMs(0);
             conf.setDispatcherRetryBackoffMaxTimeInMs(0);
+
             serviceConfigurationList.add(conf);
 
             PulsarTestContext.Builder testContextBuilder =
@@ -179,14 +191,17 @@ public abstract class TransactionTestBase extends TestRetrySupport {
                             .spyByDefault()
                             .enableOpenTelemetry(true)
                             .config(conf);
+
             if (i > 0) {
                 testContextBuilder.reuseMockBookkeeperAndMetadataStores(pulsarTestContexts.get(0));
             } else {
                 testContextBuilder.withMockZookeeper();
             }
-            PulsarTestContext pulsarTestContext = testContextBuilder
-                    .build();
+
+            PulsarTestContext pulsarTestContext = testContextBuilder.build();
+
             PulsarService pulsar = pulsarTestContext.getPulsarService();
+
             pulsarServiceList.add(pulsar);
             pulsarTestContexts.add(pulsarTestContext);
         }
