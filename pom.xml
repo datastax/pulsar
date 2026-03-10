@@ -89,12 +89,12 @@ flexible messaging model and an intuitive client API.</description>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <redirectTestOutputToFile>true</redirectTestOutputToFile>
-    <test.additional.args></test.additional.args>
+    <test.additional.args/>
     <testReuseFork>true</testReuseFork>
     <testForkCount>4</testForkCount>
     <testRealAWS>false</testRealAWS>
     <testRetryCount>1</testRetryCount>
-    <testJacocoAgentArgument></testJacocoAgentArgument>
+    <testJacocoAgentArgument/>
     <docker.organization>apachepulsar</docker.organization>
     <skipSourceReleaseAssembly>false</skipSourceReleaseAssembly>
     <skipBuildDistribution>false</skipBuildDistribution>
@@ -171,7 +171,7 @@ flexible messaging model and an intuitive client API.</description>
     <wildfly-elytron.version>1.15.16.Final</wildfly-elytron.version>
     <jsonwebtoken.version>0.11.1</jsonwebtoken.version>
     <opencensus.version>0.28.0</opencensus.version>
-    <hbase.version>2.4.9</hbase.version>
+    <hbase.version>2.5.0</hbase.version>
     <guava.version>32.0.0-jre</guava.version>
     <jcip.version>1.0</jcip.version>
     <prometheus-jmx.version>0.14.0</prometheus-jmx.version>
