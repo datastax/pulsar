@@ -92,7 +92,7 @@ flexible messaging model and an intuitive client API.</description>
 
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <project.build.outputTimestamp>2026-02-27T14:48:45Z</project.build.outputTimestamp>
+    <project.build.outputTimestamp>2026-02-09T13:43:11Z</project.build.outputTimestamp>
     <redirectTestOutputToFile>true</redirectTestOutputToFile>
 
     <!-- By default build for local Docker platform.
@@ -134,9 +134,8 @@ flexible messaging model and an intuitive client API.</description>
     <!-- apache commons -->
     <commons-compress.version>1.26.0</commons-compress.version>
 
-    <datastax.bookkeeper.version>4.16.7.0.0.0</datastax.bookkeeper.version>
-    <apache.bookkeeper.version>4.16.7</apache.bookkeeper.version>
-    <zookeeper.version>3.9.5</zookeeper.version>
+    <bookkeeper.version>4.16.7</bookkeeper.version>
+    <zookeeper.version>3.9.4</zookeeper.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <commons-text.version>1.10.0</commons-text.version>
     <snappy.version>1.1.10.5</snappy.version> <!-- ZooKeeper server -->
@@ -155,7 +154,7 @@ flexible messaging model and an intuitive client API.</description>
     <commons.collections4.version>4.4</commons.collections4.version>
     <log4j2.version>2.25.3</log4j2.version>
     <!-- bouncycastle dependencies aren't necessarily aligned -->
-    <bouncycastle.bcprov-jdk18on.version>1.79</bouncycastle.bcprov-jdk18on.version>
+    <bouncycastle.bcprov-jdk18on.version>1.78.1</bouncycastle.bcprov-jdk18on.version>
     <bouncycastle.bcpkix-jdk18on.version>1.81</bouncycastle.bcpkix-jdk18on.version>
     <bouncycastle.bcprov-ext-jdk18on.version>1.78.1</bouncycastle.bcprov-ext-jdk18on.version>
     <bouncycastle.bcpkix-fips.version>2.0.10</bouncycastle.bcpkix-fips.version>
@@ -180,9 +179,8 @@ flexible messaging model and an intuitive client API.</description>
     <sketches.version>0.8.3</sketches.version>
     <hbc-core.version>2.2.0</hbc-core.version>
     <cassandra.version>3.11.2</cassandra.version>
-    <aerospike-client.version>4.5.0</aerospike-client.version>
+    <aerospike-client.version>4.4.20</aerospike-client.version>
     <kafka-client.version>3.9.1</kafka-client.version>
-    <lz4-java.version>1.10.4</lz4-java.version>
     <rabbitmq-client.version>5.18.0</rabbitmq-client.version>
     <aws-sdk.version>1.12.788</aws-sdk.version>
     <aws-sdk2.version>2.32.28</aws-sdk2.version>
@@ -196,22 +194,21 @@ flexible messaging model and an intuitive client API.</description>
     <clickhouse-jdbc.version>0.4.6</clickhouse-jdbc.version>
     <mariadb-jdbc.version>2.7.5</mariadb-jdbc.version>
     <openmldb-jdbc.version>0.4.4-hotfix1</openmldb-jdbc.version>
+    <hdfs-offload-version3>3.3.5</hdfs-offload-version3>
     <json-smart.version>2.5.2</json-smart.version>
-    <opensearch.version>2.19.4</opensearch.version>
+    <opensearch.version>1.2.4</opensearch.version>
     <elasticsearch-java.version>8.15.3</elasticsearch-java.version>
     <trino.version>368</trino.version>
-    <debezium.version>2.6.1.Final</debezium.version>
+    <debezium.version>1.9.7.Final</debezium.version>
     <debezium.postgresql.version>42.5.5</debezium.postgresql.version>
     <debezium.mysql.version>8.0.33</debezium.mysql.version>
     <!-- Override version that brings CVE-2022-3143 with debezium -->
     <wildfly-elytron.version>1.15.16.Final</wildfly-elytron.version>
-    <mssql-jdbc.version>12.4.3.jre8</mssql-jdbc.version>
     <jsonwebtoken.version>0.11.1</jsonwebtoken.version>
     <opencensus.version>0.28.0</opencensus.version>
     <hadoop2.version>2.10.2</hadoop2.version>
-    <hadoop3.version>3.4.2</hadoop3.version>
-    <hdfs-offload-version3>${hadoop3.version}</hdfs-offload-version3>
-    <hbase.version>2.4.16</hbase.version>
+    <hadoop3.version>3.3.4</hadoop3.version>
+    <hbase.version>2.4.15</hbase.version>
     <guava.version>32.1.1-jre</guava.version>
     <jcip.version>1.0</jcip.version>
     <prometheus-jmx.version>0.16.1</prometheus-jmx.version>
@@ -246,7 +243,7 @@ flexible messaging model and an intuitive client API.</description>
     <!-- use okio version that matches the okhttp3 version -->
     <okio.version>3.4.0</okio.version>
     <!-- override kotlin-stdlib used by okio in order to address CVE-2020-29582 -->
-    <kotlin-stdlib.version>1.8.20</kotlin-stdlib.version>
+    <kotlin-stdlib.version>1.6.0</kotlin-stdlib.version>
     <nsq-client.version>1.0</nsq-client.version>
     <cron-utils.version>9.1.6</cron-utils.version>
     <spring.version>6.2.12</spring.version>
@@ -278,6 +275,7 @@ flexible messaging model and an intuitive client API.</description>
     <skyscreamer.version>1.5.0</skyscreamer.version>
     <objenesis.version>3.1</objenesis.version>
     <awaitility.version>4.2.0</awaitility.version>
+    <reload4j.version>1.2.22</reload4j.version>
     <jettison.version>1.5.4</jettison.version>
     <woodstox.version>5.4.0</woodstox.version>
     <wiremock.version>2.33.2</wiremock.version>
@@ -318,9 +316,6 @@ flexible messaging model and an intuitive client API.</description>
     <roaringbitmap.version>1.2.0</roaringbitmap.version>
     <extra-enforcer-rules.version>1.6.1</extra-enforcer-rules.version>
     <oshi.version>6.4.0</oshi.version>
-    <nimbus-jose-jwt.version>9.37.4</nimbus-jose-jwt.version>
-    <commons-beanutils.version>1.11.0</commons-beanutils.version>
-    <commons-configuration2.version>2.12.0</commons-configuration2.version>
   </properties>
 
   <dependencyManagement>
@@ -474,9 +469,9 @@ flexible messaging model and an intuitive client API.</description>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper</groupId>
         <artifactId>bookkeeper-server</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.bouncycastle</groupId>
@@ -503,9 +498,9 @@ flexible messaging model and an intuitive client API.</description>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper</groupId>
         <artifactId>cpu-affinity</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
       </dependency>
 
       <dependency>
@@ -537,15 +532,15 @@ flexible messaging model and an intuitive client API.</description>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper</groupId>
         <artifactId>bookkeeper-common-allocator</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper</groupId>
         <artifactId>bookkeeper-tools-framework</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
       </dependency>
 
       <!-- reflection libs -->
@@ -557,9 +552,9 @@ flexible messaging model and an intuitive client API.</description>
 
       <!-- exclude the grpc version from bookkeeper and use the one defined here -->
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper</groupId>
         <artifactId>stream-storage-java-client</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
         <exclusions>
           <exclusion>
             <groupId>io.grpc</groupId>
@@ -594,9 +589,9 @@ flexible messaging model and an intuitive client API.</description>
 
       <!-- exclude the grpc version from bookkeeper and use the one defined here -->
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper</groupId>
         <artifactId>stream-storage-server</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
         <exclusions>
           <exclusion>
             <groupId>io.grpc</groupId>
@@ -633,21 +628,21 @@ flexible messaging model and an intuitive client API.</description>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper</groupId>
         <artifactId>bookkeeper-common</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper.stats</groupId>
         <artifactId>bookkeeper-stats-api</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
       </dependency>
 
       <dependency>
         <groupId>org.apache.bookkeeper.stats</groupId>
         <artifactId>datasketches-metrics-provider</artifactId>
-        <version>${apache.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
         <exclusions>
           <exclusion>
             <artifactId>slf4j-log4j12</artifactId>
@@ -657,9 +652,9 @@ flexible messaging model and an intuitive client API.</description>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.bookkeeper.stats</groupId>
         <artifactId>prometheus-metrics-provider</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
       </dependency>
 
       <dependency>
@@ -1308,13 +1303,13 @@ flexible messaging model and an intuitive client API.</description>
       </dependency>
 
       <dependency>
-        <groupId>com.datastax.oss</groupId>
+        <groupId>org.apache.distributedlog</groupId>
         <artifactId>distributedlog-core</artifactId>
-        <version>${datastax.bookkeeper.version}</version>
+        <version>${bookkeeper.version}</version>
         <exclusions>
           <!-- exclude bookkeeper, reply on the bookkeeper version that pulsar uses -->
           <exclusion>
-            <groupId>com.datastax.oss</groupId>
+            <groupId>org.apache.bookkeeper</groupId>
             <artifactId>bookkeeper-server</artifactId>
           </exclusion>
         </exclusions>
@@ -1553,6 +1548,12 @@ flexible messaging model and an intuitive client API.</description>
       </dependency>
 
       <dependency>
+        <groupId>ch.qos.reload4j</groupId>
+        <artifactId>reload4j</artifactId>
+        <version>${reload4j.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
         <version>${roaringbitmap.version}</version>
@@ -1568,29 +1569,13 @@ flexible messaging model and an intuitive client API.</description>
         <version>${restassured.version}</version>
         <scope>test</scope>
       </dependency>
-      <!-- enforce nimbus-jose-jwt version that gets pulled transitively -->
-      <dependency>
-        <groupId>com.nimbusds</groupId>
-        <artifactId>nimbus-jose-jwt</artifactId>
-        <version>${nimbus-jose-jwt.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-beanutils</groupId>
-        <artifactId>commons-beanutils</artifactId>
-        <version>${commons-beanutils.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.commons</groupId>
-        <artifactId>commons-configuration2</artifactId>
-        <version>${commons-configuration2.version}</version>
-      </dependency>
     </dependencies>
   </dependencyManagement>
 
   <dependencies>
     <!-- These dependencies are common to all the submodules -->
     <dependency>
-      <groupId>com.datastax.oss</groupId>
+      <groupId>org.apache.pulsar</groupId>
       <artifactId>buildtools</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
@@ -1635,9 +1620,9 @@ flexible messaging model and an intuitive client API.</description>
 
     <dependency>
       <!-- We use MockedBookKeeper in many unit tests -->
-      <groupId>com.datastax.oss</groupId>
+      <groupId>org.apache.bookkeeper</groupId>
       <artifactId>bookkeeper-server</artifactId>
-      <version>${datastax.bookkeeper.version}</version>
+      <version>${bookkeeper.version}</version>
       <scope>test</scope>
       <classifier>tests</classifier>
       <exclusions>
@@ -1665,9 +1650,9 @@ flexible messaging model and an intuitive client API.</description>
     </dependency>
     <dependency>
       <!-- We use TestStatsProvider in many unit tests -->
-      <groupId>com.datastax.oss</groupId>
+      <groupId>org.apache.bookkeeper</groupId>
       <artifactId>bookkeeper-common</artifactId>
-      <version>${datastax.bookkeeper.version}</version>
+      <version>${bookkeeper.version}</version>
       <scope>test</scope>
       <classifier>tests</classifier>
       <exclusions>
@@ -1718,7 +1703,7 @@ flexible messaging model and an intuitive client API.</description>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <argLine>${testJacocoAgentArgument} -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${testHeapDumpPath} -XX:+ExitOnOutOfMemoryError -Xmx3G -XX:+UseZGC
+          <argLine>${testJacocoAgentArgument} -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${testHeapDumpPath} -XX:+ExitOnOutOfMemoryError -Xmx1G -XX:+UseZGC
             -Dpulsar.allocator.pooled=true
             -Dpulsar.allocator.leak_detection=Advanced
             -Dpulsar.allocator.exit_on_oom=false
@@ -1744,9 +1729,6 @@ flexible messaging model and an intuitive client API.</description>
               <value>org.apache.pulsar.tests.PulsarTestListener,org.apache.pulsar.tests.JacocoDumpListener,org.apache.pulsar.tests.AnnotationListener,org.apache.pulsar.tests.FailFastNotifier,org.apache.pulsar.tests.MockitoCleanupListener,org.apache.pulsar.tests.FastThreadLocalCleanupListener,org.apache.pulsar.tests.ThreadLeakDetectorListener,org.apache.pulsar.tests.SingletonCleanerListener</value>
             </property>
           </properties>
-          <excludes>
-            <exclude>**/AlluxioSink*.java</exclude>
-          </excludes>
         </configuration>
         <dependencies>
           <dependency>
@@ -1771,7 +1753,7 @@ flexible messaging model and an intuitive client API.</description>
             <configuration>
               <property>pulsar.basedir</property>
               <project>
-                <groupId>com.datastax.oss</groupId>
+                <groupId>org.apache.pulsar</groupId>
                 <artifactId>pulsar</artifactId>
               </project>
             </configuration>
@@ -2496,7 +2478,6 @@ flexible messaging model and an intuitive client API.</description>
         <module>pulsar-client-tools-customcommand-example</module>
         <module>pulsar-client-tools-test</module>
         <module>pulsar-client-all</module>
-        <module>pulsar-docs-tools</module>
         <module>pulsar-websocket</module>
         <module>pulsar-proxy</module>
         <module>pulsar-testclient</module>
@@ -2560,7 +2541,6 @@ flexible messaging model and an intuitive client API.</description>
         <module>pulsar-client-tools</module>
         <module>pulsar-client-tools-customcommand-example</module>
         <module>pulsar-client-tools-test</module>
-        <module>pulsar-docs-tools</module>
         <module>pulsar-websocket</module>
         <module>pulsar-proxy</module>
         <module>pulsar-testclient</module>
@@ -2790,138 +2770,6 @@ flexible messaging model and an intuitive client API.</description>
         <module>pulsar-sql</module>
       </modules>
     </profile>
-    <profile>
-<!--      Profile for deploying artifacts to Maven Central.-->
-<!--      Copied from apache-release profile.-->
-<!--      Sources, javadoc and gpg plugin will apply.-->
-      <id>datastax-release</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-assembly-plugin</artifactId>
-            <dependencies>
-              <dependency>
-                <groupId>org.apache.apache.resources</groupId>
-                <artifactId>apache-source-release-assembly-descriptor</artifactId>
-                <version>1.0.6</version>
-              </dependency>
-            </dependencies>
-            <executions>
-              <execution>
-                <id>source-release-assembly</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>single</goal>
-                </goals>
-                <configuration>
-                  <runOnlyAtExecutionRoot>true</runOnlyAtExecutionRoot>
-                  <descriptorRefs>
-                    <descriptorRef>${sourceReleaseAssemblyDescriptor}</descriptorRef>
-                  </descriptorRefs>
-                  <tarLongFileMode>posix</tarLongFileMode>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <!-- We want to deploy the artifact to a staging location for perusal -->
-          <plugin>
-            <inherited>true</inherited>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-deploy-plugin</artifactId>
-            <configuration>
-              <updateReleaseInfo>true</updateReleaseInfo>
-            </configuration>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-source-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>attach-sources</id>
-                <goals>
-                  <goal>jar-no-fork</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-javadoc-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>attach-javadocs</id>
-                <goals>
-                  <goal>jar</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-          <!-- We want to sign the artifact, the POM, and all attached artifacts -->
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-gpg-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>sign-release-artifacts</id>
-                <goals>
-                  <goal>sign</goal>
-                </goals>
-                <!-- Prevent gpg from using pinentry programs. Fixes: gpg: signing
-                 failed: Inappropriate ioctl for device -->
-                <configuration>
-                  <gpgArguments>
-                    <arg>--pinentry-mode</arg>
-                    <arg>loopback</arg>
-                  </gpgArguments>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <!-- calculate checksums of source release for Apache dist area -->
-          <plugin>
-            <groupId>net.nicoulaj.maven.plugins</groupId>
-            <artifactId>checksum-maven-plugin</artifactId>
-            <version>1.7</version>
-            <executions>
-              <execution>
-                <id>source-release-checksum</id>
-                <goals>
-                  <goal>files</goal>
-                </goals>
-              </execution>
-            </executions>
-            <configuration>
-              <algorithms>
-                <algorithm>SHA-512</algorithm>
-              </algorithms>
-              <csvSummary>false</csvSummary>
-              <fileSets>
-                <fileSet>
-                  <directory>${project.build.directory}</directory>
-                  <includes>
-                    <include>${project.artifactId}-${project.version}-source-release.zip</include>
-                    <include>${project.artifactId}-${project.version}-source-release.tar*</include>
-                  </includes>
-                </fileSet>
-              </fileSets>
-              <failIfNoFiles>false</failIfNoFiles><!-- usually, no file to do checksum: don't consider error -->
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-
-      <distributionManagement>
-        <snapshotRepository>
-          <id>ossrh</id>
-          <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
-        <repository>
-          <id>ossrh</id>
-          <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
-        </repository>
-      </distributionManagement>
-    </profile>
 
     <profile>
       <id>jdk21</id>
@@ -2974,56 +2822,5 @@ flexible messaging model and an intuitive client API.</description>
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>confluent</id>
-      <url>https://packages.confluent.io/maven/</url>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>datastax-releases</id>
-      <url>https://repo.aws.dsinternal.org/artifactory/datastax-releases-local</url>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-    </repository>
-    <repository>
-      <id>datastax-snapshots-local</id>
-      <url>https://repo.aws.dsinternal.org/artifactory/datastax-snapshots-local</url>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-    </repository>
-    <repository>
-      <id>public-datastax-releases</id>
-      <url>https://repo.datastax.com/datastax-public-releases-local</url>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-    </repository>
   </repositories>
-
-  <distributionManagement>
-    <repository>
-      <id>datastax-releases</id>
-      <name>DataStax Local Releases</name>
-      <url>https://repo.aws.dsinternal.org/artifactory/datastax-public-releases-local/</url>
-    </repository>
-    <snapshotRepository>
-      <id>datastax-snapshots-local</id>
-      <name>DataStax Local Snapshots</name>
-      <url>https://repo.aws.dsinternal.org/artifactory/datastax-snapshots-local/</url>
-    </snapshotRepository>
-  </distributionManagement>
-
 </project>
