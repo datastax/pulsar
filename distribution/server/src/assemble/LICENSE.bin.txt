@@ -631,6 +631,7 @@ Bouncy Castle License
     - org.bouncycastle-bcpkix-jdk18on-1.81.jar
     - org.bouncycastle-bcprov-jdk18on-1.79.jar
     - org.bouncycastle-bcutil-jdk18on-1.81.jar
+    - bcprov-jdk18on-1.79.jar
 
 ------------------------
 
