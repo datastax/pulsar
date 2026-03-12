@@ -31,6 +31,7 @@
     <properties>
         <solr.version>9.10.1</solr.version>
         <jetty10.version>10.0.24</jetty10.version>
+        <http2.common.version>10.0.26</http2.common.version>
     </properties>
 
     <artifactId>pulsar-io-solr</artifactId>
@@ -54,7 +55,7 @@
             <dependency>
                 <groupId>org.eclipse.jetty.http2</groupId>
                 <artifactId>http2-common</artifactId>
-                <version>10.0.26</version>
+                <version>${http2.common.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
