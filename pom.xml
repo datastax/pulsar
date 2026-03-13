@@ -182,6 +182,7 @@ flexible messaging model and an intuitive client API.</description>
     <cassandra.version>3.11.2</cassandra.version>
     <aerospike-client.version>4.5.0</aerospike-client.version>
     <kafka-client.version>3.9.1</kafka-client.version>
+    <lz4-java.version>1.10.4</lz4-java.version>
     <rabbitmq-client.version>5.18.0</rabbitmq-client.version>
     <aws-sdk.version>1.12.788</aws-sdk.version>
     <aws-sdk2.version>2.32.28</aws-sdk2.version>
@@ -204,6 +205,7 @@ flexible messaging model and an intuitive client API.</description>
     <debezium.mysql.version>8.0.33</debezium.mysql.version>
     <!-- Override version that brings CVE-2022-3143 with debezium -->
     <wildfly-elytron.version>1.15.16.Final</wildfly-elytron.version>
+    <mssql-jdbc.version>12.4.3.jre8</mssql-jdbc.version>
     <jsonwebtoken.version>0.11.1</jsonwebtoken.version>
     <opencensus.version>0.28.0</opencensus.version>
     <hadoop2.version>2.10.2</hadoop2.version>
