@@ -331,8 +331,6 @@ The Apache Software License, Version 2.0
     - guava-32.1.2-jre.jar
     - failureaccess-1.0.1.jar
     - listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar
- * Kotlin Standard Library
-     - kotlin-stdlib-1.9.25.jar
  * J2ObjC Annotations -- j2objc-annotations-1.3.jar
  * Netty Reactive Streams -- netty-reactive-streams-2.0.6.jar
  * Swagger -- swagger-annotations-1.6.2.jar
