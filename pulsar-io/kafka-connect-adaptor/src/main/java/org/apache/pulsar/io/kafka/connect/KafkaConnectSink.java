@@ -123,6 +123,14 @@ public class KafkaConnectSink implements Sink<GenericObject> {
             return;
         }
 
+        if (currentBatchSize.get() >= maxBatchSize) {
+            if (log.isDebugEnabled()) {
+                log.debug("Sink is paused until flush succeeds. currentBatchSize: {}, maxBatchSize:{}",
+                        currentBatchSize, maxBatchSize);
+            }
+            return;
+        }
+
         // while sourceRecord.getMessage() is Optional<>
         // it should always be present in Sink which gets instance of PulsarRecord
         // let's avoid checks for .isPresent() in teh rest of the code
