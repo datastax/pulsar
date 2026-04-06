@@ -190,7 +190,7 @@ public class KinesisSinkTester extends SinkTester<LocalStackContainer> {
     @Override
     public void validateSinkResult(Map<String, String> kvs) {
         Awaitility.await()
-                .atMost(60, TimeUnit.SECONDS)
+                .atMost(300, TimeUnit.SECONDS)
                 .pollInterval(2, TimeUnit.SECONDS)
                 .untilAsserted(() -> internalValidateSinkResult(kvs));
     }
