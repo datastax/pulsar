@@ -603,8 +603,8 @@ public class KafkaConnectSink implements Sink<GenericObject> {
         try {
             while (isRunning && (flushStalled || currentBatchSize.get() >= maxBatchSize)) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Sink is paused until flush succeeds. currentBatchSize: {}, maxBatchSize:{}, flushStalled:{}",
-                            currentBatchSize.get(), maxBatchSize, flushStalled);
+                    log.debug("Sink is paused until flush succeeds. currentBatchSize: {}, maxBatchSize:{}, "
+                                    + "flushStalled:{}", currentBatchSize.get(), maxBatchSize, flushStalled);
                 }
                 try {
                     notFullOrNotStalled.await();
