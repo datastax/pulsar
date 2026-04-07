@@ -33,7 +33,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import lombok.AllArgsConstructor;
 import lombok.Cleanup;
 import lombok.Data;
@@ -189,10 +188,7 @@ public class KinesisSinkTester extends SinkTester<LocalStackContainer> {
 
     @Override
     public void validateSinkResult(Map<String, String> kvs) {
-        Awaitility.await()
-                .atMost(300, TimeUnit.SECONDS)
-                .pollInterval(2, TimeUnit.SECONDS)
-                .untilAsserted(() -> internalValidateSinkResult(kvs));
+        Awaitility.await().untilAsserted(() -> internalValidateSinkResult(kvs));
     }
 
     @SneakyThrows
