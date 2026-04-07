@@ -590,6 +590,9 @@ public class KafkaConnectSink implements Sink<GenericObject> {
     }
 
     private boolean waitForBackpressure(Record<GenericObject> sourceRecord) {
+        if (!flushStalled && currentBatchSize.get() < maxBatchSize && isRunning) {
+            return true;
+        }
         backpressureLock.lock();
         try {
             while (isRunning && (flushStalled || currentBatchSize.get() >= maxBatchSize)) {
