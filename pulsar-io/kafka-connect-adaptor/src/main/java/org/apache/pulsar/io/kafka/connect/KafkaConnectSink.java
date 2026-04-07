@@ -282,13 +282,7 @@ public class KafkaConnectSink implements Sink<GenericObject> {
             taskContext.flushOffsets(committedOffsets);
             ackUntil(lastNotFlushed, committedOffsets, Record::ack);
 
-            backpressureLock.lock();
-            try {
-                flushStalled = false;
-                notFullOrNotStalled.signalAll();
-            } finally {
-                backpressureLock.unlock();
-            }
+            signalWriters();
 
             log.info("Flush succeeded");
         } catch (Throwable t) {
@@ -625,6 +619,7 @@ public class KafkaConnectSink implements Sink<GenericObject> {
     private void signalWriters() {
         backpressureLock.lock();
         try {
+            flushStalled = false;
             notFullOrNotStalled.signalAll();
         } finally {
             backpressureLock.unlock();
