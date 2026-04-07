@@ -267,11 +267,8 @@ public class KafkaConnectSink implements Sink<GenericObject> {
             if (committedOffsets == null || committedOffsets.isEmpty()) {
                 if (!currentOffsets.isEmpty()) {
                     backpressureLock.lock();
-                    try {
-                        flushStalled = true;
-                    } finally {
-                        backpressureLock.unlock();
-                    }
+                    flushStalled = true;
+                    backpressureLock.unlock();
                     log.warn("Task returned empty committedOffsets while currentOffsets is non-empty; "
                             + "stalling writes until flush recovers");
                 } else {
