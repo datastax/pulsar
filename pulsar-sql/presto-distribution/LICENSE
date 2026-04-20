@@ -419,8 +419,8 @@ The Apache Software License, Version 2.0
   * JCTools
     - jctools-core-2.1.2.jar
   * Asynchronous Http Client
-    - async-http-client-2.12.4.jar
-    - async-http-client-netty-utils-2.12.4.jar
+    - async-http-client-2.14.5.jar
+    - async-http-client-netty-utils-2.14.5.jar
   * Apache Bookkeeper
     - bookkeeper-common-4.16.7.0.0.0.jar
     - bookkeeper-common-allocator-4.16.7.0.0.0.jar
@@ -575,7 +575,7 @@ Public Domain (CC0) -- licenses/LICENSE-CC0.txt
  * AOP Alliance
    - aopalliance-1.0.jar
  * Reactive Streams
-    - reactive-streams-1.0.3.jar
+    - reactive-streams-1.0.4.jar
 
 Creative Commons Attribution License
  * Jcip -- licenses/LICENSE-jcip.txt
