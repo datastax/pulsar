@@ -68,7 +68,16 @@ runs:
             # stop unnecessary services
             sudo systemctl stop php8.3-fpm.service ModemManager.service \
               multipathd.service udisks2.service walinuxagent.service || true
-          
+
+            # enable docker experimental mode which is
+            # required for using "docker build --squash" / "-Ddocker.squash=true"
+            # also set the minimum Docker API version to 1.24 for compatibility with old docker clients
+            # https://www.docker.com/blog/docker-engine-version-29/
+            daemon_json="$(sudo cat /etc/docker/daemon.json 2>/dev/null || echo '{}')"
+            echo "$daemon_json" | jq '.experimental = true | ."min-api-version" = "1.24"' | sudo tee /etc/docker/daemon.json
+            # restart docker daemon
+            sudo systemctl restart docker
+
             echo '::endgroup::'
 
             # show memory
