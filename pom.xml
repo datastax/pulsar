@@ -1584,11 +1584,11 @@ flexible messaging model and an intuitive client API.</description>
         <artifactId>commons-configuration2</artifactId>
         <version>${commons-configuration2.version}</version>
       </dependency>
-        <dependency>
-            <groupId>at.yawk.lz4</groupId>
-            <artifactId>lz4-java</artifactId>
-            <version>${lz4-java.version}</version>
-        </dependency>
+      <dependency>
+        <groupId>at.yawk.lz4</groupId>
+        <artifactId>lz4-java</artifactId>
+        <version>${lz4-java.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
