@@ -89,12 +89,12 @@ flexible messaging model and an intuitive client API.</description>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <redirectTestOutputToFile>true</redirectTestOutputToFile>
-    <test.additional.args></test.additional.args>
+    <test.additional.args/>
     <testReuseFork>true</testReuseFork>
     <testForkCount>4</testForkCount>
     <testRealAWS>false</testRealAWS>
     <testRetryCount>1</testRetryCount>
-    <testJacocoAgentArgument></testJacocoAgentArgument>
+    <testJacocoAgentArgument/>
     <docker.organization>apachepulsar</docker.organization>
     <skipSourceReleaseAssembly>false</skipSourceReleaseAssembly>
     <skipBuildDistribution>false</skipBuildDistribution>
@@ -154,7 +154,7 @@ flexible messaging model and an intuitive client API.</description>
     <guice.version>5.1.0</guice.version>
     <sqlite-jdbc.version>3.42.0.0</sqlite-jdbc.version>
     <mysql-jdbc.version>8.0.11</mysql-jdbc.version>
-    <postgresql-jdbc.version>42.4.1</postgresql-jdbc.version>
+    <postgresql-jdbc.version>42.7.11</postgresql-jdbc.version>
     <clickhouse-jdbc.version>0.3.2</clickhouse-jdbc.version>
     <mariadb-jdbc.version>2.7.5</mariadb-jdbc.version>
     <hdfs-offload-version3>3.3.5</hdfs-offload-version3>
