@@ -32,7 +32,7 @@
   <groupId>com.datastax.oss</groupId>
   <artifactId>pulsar</artifactId>
 
-  <version>3.1.4.27</version>
+  <version>3.1.4.28-SNAPSHOT</version>
 
   <name>Pulsar</name>
   <description>Pulsar is a distributed pub-sub messaging platform with a very
@@ -92,7 +92,7 @@ flexible messaging model and an intuitive client API.</description>
 
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <project.build.outputTimestamp>2026-05-07T12:42:29Z</project.build.outputTimestamp>
+    <project.build.outputTimestamp>2026-05-07T12:42:49Z</project.build.outputTimestamp>
     <redirectTestOutputToFile>true</redirectTestOutputToFile>
 
     <!-- By default build for local Docker platform.
