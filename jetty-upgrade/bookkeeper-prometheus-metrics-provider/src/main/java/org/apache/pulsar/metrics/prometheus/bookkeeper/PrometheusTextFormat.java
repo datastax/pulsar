@@ -141,7 +141,7 @@ public class PrometheusTextFormat {
     }
 
     private void writeQuantile(Writer w, DataSketchesOpStatsLogger opStat, String name, Boolean success,
-            double quantile) throws IOException {
+                               double quantile) throws IOException {
         w.append(name)
                 .append("{success=\"").append(success.toString())
                 .append("\",quantile=\"").append(Double.toString(quantile))
@@ -176,7 +176,8 @@ public class PrometheusTextFormat {
                 .append(Double.toString(opStat.getSum(success))).append('\n');
     }
 
-    public static void writeMetricsCollectedByPrometheusClient(Writer w, CollectorRegistry registry) throws IOException {
+    public static void writeMetricsCollectedByPrometheusClient(Writer w, CollectorRegistry registry)
+            throws IOException {
         Enumeration<MetricFamilySamples> metricFamilySamples = registry.metricFamilySamples();
         while (metricFamilySamples.hasMoreElements()) {
             MetricFamilySamples metricFamily = metricFamilySamples.nextElement();
