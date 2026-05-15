@@ -25,7 +25,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import org.apache.pulsar.bookkeeper.stats.prometheus.PrometheusMetricsProvider;
+import org.apache.bookkeeper.stats.prometheus.PrometheusMetricsProvider;
 
 /**
  * Servlet used to export metrics in prometheus text format.

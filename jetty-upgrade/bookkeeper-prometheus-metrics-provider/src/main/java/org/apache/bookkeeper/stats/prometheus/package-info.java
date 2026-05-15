@@ -19,4 +19,4 @@
 /**
  * A stats provider implementation for BookKeeper that uses Jetty 12.
  */
-package org.apache.pulsar.bookkeeper.stats.prometheus;
+package org.apache.bookkeeper.stats.prometheus;

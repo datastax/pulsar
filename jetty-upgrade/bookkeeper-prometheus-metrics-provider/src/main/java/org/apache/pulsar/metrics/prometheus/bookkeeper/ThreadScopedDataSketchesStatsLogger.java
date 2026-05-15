@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.bookkeeper.stats.OpStatsData;
 import org.apache.bookkeeper.stats.OpStatsLogger;
 import org.apache.bookkeeper.stats.ThreadRegistry;
-import org.apache.pulsar.bookkeeper.stats.prometheus.PrometheusMetricsProvider;
+import org.apache.bookkeeper.stats.prometheus.PrometheusMetricsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
