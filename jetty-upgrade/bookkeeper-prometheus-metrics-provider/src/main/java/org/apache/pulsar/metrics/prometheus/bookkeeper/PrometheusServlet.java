@@ -19,6 +19,8 @@
 package org.apache.pulsar.metrics.prometheus.bookkeeper;
 
 import io.prometheus.client.exporter.common.TextFormat;
+import org.apache.pulsar.bookkeeper.stats.prometheus.PrometheusMetricsProvider;
+
 import java.io.IOException;
 import java.io.Writer;
 import javax.servlet.ServletException;

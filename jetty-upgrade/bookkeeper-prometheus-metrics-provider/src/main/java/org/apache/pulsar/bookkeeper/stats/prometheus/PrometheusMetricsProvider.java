@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.pulsar.metrics.prometheus.bookkeeper;
+package org.apache.pulsar.bookkeeper.stats.prometheus;
 
 // CHECKSTYLE.OFF: IllegalImport
 
@@ -52,6 +52,7 @@ import org.apache.bookkeeper.stats.StatsProvider;
 import org.apache.bookkeeper.stats.ThreadRegistry;
 import org.apache.commons.configuration2.Configuration;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.pulsar.metrics.prometheus.bookkeeper.*;
 import org.eclipse.jetty.ee8.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee8.servlet.ServletHolder;
 import org.eclipse.jetty.server.Server;
@@ -80,17 +81,17 @@ public class PrometheusMetricsProvider implements StatsProvider {
 
     final CollectorRegistry registry;
 
-    Server server;
+    public Server server;
 
     /*
      * These acts a registry of the metrics defined in this provider
      */
-    final ConcurrentMap<ScopeContext, LongAdderCounter> counters = new ConcurrentHashMap<>();
-    final ConcurrentMap<ScopeContext, SimpleGauge<? extends Number>> gauges = new ConcurrentHashMap<>();
-    final ConcurrentMap<ScopeContext, DataSketchesOpStatsLogger> opStats = new ConcurrentHashMap<>();
-    final ConcurrentMap<ScopeContext, ThreadScopedDataSketchesStatsLogger> threadScopedOpStats =
+    public final ConcurrentMap<ScopeContext, LongAdderCounter> counters = new ConcurrentHashMap<>();
+    public final ConcurrentMap<ScopeContext, SimpleGauge<? extends Number>> gauges = new ConcurrentHashMap<>();
+    public final ConcurrentMap<ScopeContext, DataSketchesOpStatsLogger> opStats = new ConcurrentHashMap<>();
+    public final ConcurrentMap<ScopeContext, ThreadScopedDataSketchesStatsLogger> threadScopedOpStats =
             new ConcurrentHashMap<>();
-    final ConcurrentMap<ScopeContext, ThreadScopedLongAdderCounter> threadScopedCounters =
+    public final ConcurrentMap<ScopeContext, ThreadScopedLongAdderCounter> threadScopedCounters =
             new ConcurrentHashMap<>();
 
     public PrometheusMetricsProvider() {
@@ -203,7 +204,7 @@ public class PrometheusMetricsProvider implements StatsProvider {
     }
 
     @VisibleForTesting
-    void rotateLatencyCollection() {
+    public void rotateLatencyCollection() {
         opStats.forEach((name, metric) -> {
             metric.rotateLatencyCollection();
         });

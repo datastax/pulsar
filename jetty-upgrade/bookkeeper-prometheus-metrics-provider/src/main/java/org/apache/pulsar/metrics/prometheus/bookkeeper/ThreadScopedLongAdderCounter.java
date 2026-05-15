@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.bookkeeper.stats.Counter;
 import org.apache.bookkeeper.stats.ThreadRegistry;
+import org.apache.pulsar.bookkeeper.stats.prometheus.PrometheusMetricsProvider;
 
 /**
  * {@link Counter} implementation that lazily registers LongAdderCounters per thread
