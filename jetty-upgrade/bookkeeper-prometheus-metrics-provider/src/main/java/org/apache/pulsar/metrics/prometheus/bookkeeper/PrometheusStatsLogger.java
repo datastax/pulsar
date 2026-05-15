@@ -45,28 +45,28 @@ public class PrometheusStatsLogger implements StatsLogger {
 
     @Override
     public OpStatsLogger getOpStatsLogger(String name) {
-        return provider.opStats.computeIfAbsent(scopeContext(name), x -> new DataSketchesOpStatsLogger(labels));
+        return provider.getOpStats().computeIfAbsent(scopeContext(name), x -> new DataSketchesOpStatsLogger(labels));
     }
 
     @Override
     public OpStatsLogger getThreadScopedOpStatsLogger(String name) {
-        return provider.threadScopedOpStats.computeIfAbsent(scopeContext(name),
+        return provider.getThreadScopedOpStats().computeIfAbsent(scopeContext(name),
                 x -> new ThreadScopedDataSketchesStatsLogger(provider, x, labels));
     }
 
     @Override
     public Counter getCounter(String name) {
-        return provider.counters.computeIfAbsent(scopeContext(name), x -> new LongAdderCounter(labels));
+        return provider.getCounters().computeIfAbsent(scopeContext(name), x -> new LongAdderCounter(labels));
     }
 
     public Counter getThreadScopedCounter(String name) {
-        return provider.threadScopedCounters.computeIfAbsent(scopeContext(name),
+        return provider.getThreadScopedCounters().computeIfAbsent(scopeContext(name),
                 x -> new ThreadScopedLongAdderCounter(provider, x, labels));
     }
 
     @Override
     public <T extends Number> void registerGauge(String name, Gauge<T> gauge) {
-        provider.gauges.computeIfAbsent(scopeContext(name), x -> new SimpleGauge<T>(gauge, labels));
+        provider.getGauges().computeIfAbsent(scopeContext(name), x -> new SimpleGauge<T>(gauge, labels));
     }
 
     @Override

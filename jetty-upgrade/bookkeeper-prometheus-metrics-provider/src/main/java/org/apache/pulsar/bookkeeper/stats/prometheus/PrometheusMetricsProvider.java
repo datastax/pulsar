@@ -47,6 +47,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import lombok.Getter;
 import org.apache.bookkeeper.stats.StatsLogger;
 import org.apache.bookkeeper.stats.StatsProvider;
 import org.apache.bookkeeper.stats.ThreadRegistry;
@@ -89,17 +90,23 @@ public class PrometheusMetricsProvider implements StatsProvider {
 
     final CollectorRegistry registry;
 
-    public Server server;
+    @Getter
+    Server server;
 
     /*
      * These acts a registry of the metrics defined in this provider
      */
-    public final ConcurrentMap<ScopeContext, LongAdderCounter> counters = new ConcurrentHashMap<>();
-    public final ConcurrentMap<ScopeContext, SimpleGauge<? extends Number>> gauges = new ConcurrentHashMap<>();
-    public final ConcurrentMap<ScopeContext, DataSketchesOpStatsLogger> opStats = new ConcurrentHashMap<>();
-    public final ConcurrentMap<ScopeContext, ThreadScopedDataSketchesStatsLogger> threadScopedOpStats =
+    @Getter
+    final ConcurrentMap<ScopeContext, LongAdderCounter> counters = new ConcurrentHashMap<>();
+    @Getter
+    final ConcurrentMap<ScopeContext, SimpleGauge<? extends Number>> gauges = new ConcurrentHashMap<>();
+    @Getter
+    final ConcurrentMap<ScopeContext, DataSketchesOpStatsLogger> opStats = new ConcurrentHashMap<>();
+    @Getter
+    final ConcurrentMap<ScopeContext, ThreadScopedDataSketchesStatsLogger> threadScopedOpStats =
             new ConcurrentHashMap<>();
-    public final ConcurrentMap<ScopeContext, ThreadScopedLongAdderCounter> threadScopedCounters =
+    @Getter
+    final ConcurrentMap<ScopeContext, ThreadScopedLongAdderCounter> threadScopedCounters =
             new ConcurrentHashMap<>();
 
     public PrometheusMetricsProvider() {
@@ -142,7 +149,7 @@ public class PrometheusMetricsProvider implements StatsProvider {
             registerMetrics(new GarbageCollectorExports());
             registerMetrics(new ThreadExports());
 
-        // Add direct memory allocated through unsafe
+            // Add direct memory allocated through unsafe
             registerMetrics(Gauge.build("jvm_memory_direct_bytes_used", "-").create().setChild(new Child() {
                 @Override
                 public double get() {

@@ -48,7 +48,7 @@ public class TestPrometheusMetricsProvider {
         PrometheusMetricsProvider provider = new PrometheusMetricsProvider();
         try {
             provider.start(config);
-            assertNull(provider.server);
+            assertNull(provider.getServer());
         } finally {
             provider.stop();
         }
@@ -61,7 +61,7 @@ public class TestPrometheusMetricsProvider {
         config.setProperty("httpServerEnabled", true);
         @Cleanup("stop") PrometheusMetricsProvider provider = new PrometheusMetricsProvider();
         provider.start(config);
-        assertNull(provider.server);
+        assertNull(provider.getServer());
     }
 
     @Test
@@ -72,7 +72,7 @@ public class TestPrometheusMetricsProvider {
         PrometheusMetricsProvider provider = new PrometheusMetricsProvider();
         try {
             provider.start(config);
-            assertNotNull(provider.server);
+            assertNotNull(provider.getServer());
         } finally {
             provider.stop();
         }
@@ -87,7 +87,7 @@ public class TestPrometheusMetricsProvider {
         PrometheusMetricsProvider provider = new PrometheusMetricsProvider();
         try {
             provider.start(config);
-            assertNotNull(provider.server);
+            assertNotNull(provider.getServer());
         } finally {
             provider.stop();
         }
@@ -125,7 +125,7 @@ public class TestPrometheusMetricsProvider {
         assertEquals(counter1, counter2);
         assertSame(counter1, counter2);
 
-        assertEquals(1, provider.counters.size());
+        assertEquals(1, provider.getCounters().size());
     }
 
     @Test
@@ -138,7 +138,7 @@ public class TestPrometheusMetricsProvider {
         PrometheusMetricsProvider provider = new PrometheusMetricsProvider();
         try {
             provider.start(config);
-            assertNotNull(provider.server);
+            assertNotNull(provider.getServer());
             StringWriter writer = new StringWriter();
             provider.writeAllMetrics(writer);
             String s = writer.toString();

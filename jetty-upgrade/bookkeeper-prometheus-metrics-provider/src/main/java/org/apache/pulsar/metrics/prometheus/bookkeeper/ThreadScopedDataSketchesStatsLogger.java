@@ -105,7 +105,7 @@ public class ThreadScopedDataSketchesStatsLogger implements OpStatsLogger {
                 logger.warn("Thread {} was not registered in the thread registry. Using default stats logger {}.",
                         Thread.currentThread(), defaultStatsLogger);
                 statsLoggers.set(defaultStatsLogger);
-                DataSketchesOpStatsLogger previous = provider.opStats
+                DataSketchesOpStatsLogger previous = provider.getOpStats()
                         .put(new ScopeContext(scopeContext.getScope(), originalLabels), defaultStatsLogger);
                 // If we overwrite a logger, metrics will not be collected correctly
                 if (previous != null && previous != defaultStatsLogger) {
@@ -121,7 +121,7 @@ public class ThreadScopedDataSketchesStatsLogger implements OpStatsLogger {
                 threadScopedlabels.put("thread", String.valueOf(tpt.getOrdinal()));
 
                 statsLogger.initializeThread(threadScopedlabels);
-                DataSketchesOpStatsLogger previous = provider.opStats
+                DataSketchesOpStatsLogger previous = provider.getOpStats()
                         .put(new ScopeContext(scopeContext.getScope(), threadScopedlabels), statsLogger);
                 // If we overwrite a logger, metrics will not be collected correctly
                 if (previous != null && previous != statsLogger) {

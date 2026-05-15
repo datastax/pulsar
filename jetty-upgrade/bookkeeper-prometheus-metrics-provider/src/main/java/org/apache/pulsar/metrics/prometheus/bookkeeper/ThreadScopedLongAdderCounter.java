@@ -95,7 +95,7 @@ public class ThreadScopedLongAdderCounter implements Counter {
 
             if (tpt == null) {
                 counters.set(defaultCounter);
-                provider.counters.put(new ScopeContext(scopeContext.getScope(), originalLabels), defaultCounter);
+                provider.getCounters().put(new ScopeContext(scopeContext.getScope(), originalLabels), defaultCounter);
                 return defaultCounter;
             } else {
                 Map<String, String> threadScopedlabels = new HashMap<>(originalLabels);
@@ -103,7 +103,7 @@ public class ThreadScopedLongAdderCounter implements Counter {
                 threadScopedlabels.put("thread", String.valueOf(tpt.getOrdinal()));
 
                 counter.initializeThread(threadScopedlabels);
-                provider.counters.put(new ScopeContext(scopeContext.getScope(), threadScopedlabels), counter);
+                provider.getCounters().put(new ScopeContext(scopeContext.getScope(), threadScopedlabels), counter);
             }
         }
 
