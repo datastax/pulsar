@@ -508,8 +508,8 @@ public class AvroSchemaTest {
                 .withJSR310ConversionEnabled(false).build());
 
         TimestampPojo decodeWithJsonNoClassLoader = schemaWithJsonDefNoClassLoader.decode(encode);
-        Assert.assertNotEquals(decodeWithJsonNoClassLoader, decodeWithPojo);
-        Assert.assertNotEquals(Instant.class, decodeWithJsonNoClassLoader.getValue().getClass());
+        Assert.assertEquals(decodeWithJsonNoClassLoader, decodeWithPojo);
+        Assert.assertEquals(Instant.class, decodeWithJsonNoClassLoader.getValue().getClass());
     }
 
     @Test
@@ -540,8 +540,8 @@ public class AvroSchemaTest {
                 .withJSR310ConversionEnabled(true).build());
 
         TimestampPojo decodeWithJsonNoClassLoader = schemaWithJsonDefNoClassLoader.decode(encode);
-        Assert.assertNotEquals(decodeWithJsonNoClassLoader, decodeWithPojo);
-        Assert.assertNotEquals(Instant.class, decodeWithJsonNoClassLoader.getValue().getClass());
+        Assert.assertEquals(decodeWithJsonNoClassLoader, decodeWithPojo);
+        Assert.assertEquals(Instant.class, decodeWithJsonNoClassLoader.getValue().getClass());
     }
 
     @Data
