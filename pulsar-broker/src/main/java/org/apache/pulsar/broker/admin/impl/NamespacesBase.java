@@ -57,7 +57,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.pulsar.broker.PulsarServerException;
 import org.apache.pulsar.broker.admin.AdminResource;
-import org.apache.pulsar.broker.loadbalance.LeaderBroker;
 import org.apache.pulsar.broker.loadbalance.extensions.ExtensibleLoadManagerImpl;
 import org.apache.pulsar.broker.service.BrokerServiceException;
 import org.apache.pulsar.broker.service.BrokerServiceException.SubscriptionBusyException;
@@ -1053,42 +1052,44 @@ public abstract class NamespacesBase extends AdminResource {
         if (this.isLeaderBroker()) {
             return CompletableFuture.completedFuture(null);
         }
-        Optional<LeaderBroker> currentLeaderOpt = pulsar().getLeaderElectionService().getCurrentLeader();
-        if (currentLeaderOpt.isEmpty()) {
-            String errorStr = "The current leader is empty.";
-            log.error(errorStr);
-            return FutureUtil.failedFuture(new RestException(Response.Status.PRECONDITION_FAILED, errorStr));
-        }
-        LeaderBroker leaderBroker = pulsar().getLeaderElectionService().getCurrentLeader().get();
-        String leaderBrokerId = leaderBroker.getBrokerId();
-        return pulsar().getNamespaceService()
-                .createLookupResult(leaderBrokerId, false, null)
-                .thenCompose(lookupResult -> {
-                    String redirectUrl = isRequestHttps() ? lookupResult.getLookupData().getHttpUrlTls()
-                            : lookupResult.getLookupData().getHttpUrl();
-                    if (redirectUrl == null) {
-                        log.error("Redirected broker's service url is not configured");
-                        return FutureUtil.failedFuture(new RestException(Response.Status.PRECONDITION_FAILED,
-                                "Redirected broker's service url is not configured."));
-                    }
-
-                    try {
-                        URL url = new URL(redirectUrl);
-                        URI redirect = UriBuilder.fromUri(uri.getRequestUri()).host(url.getHost())
-                                .port(url.getPort())
-                                .replaceQueryParam("authoritative",
-                                        false).build();
-                        // Redirect
-                        if (log.isDebugEnabled()) {
-                            log.debug("Redirecting the request call to leader - {}", redirect);
+        // The authoritative read: waits for an in-progress leader election to settle instead of
+        // failing the request while a re-election is still in flight.
+        return pulsar().getLeaderElectionService().readCurrentLeader().thenCompose(currentLeaderOpt -> {
+            if (currentLeaderOpt.isEmpty()) {
+                String errorStr = "The current leader is empty.";
+                log.error(errorStr);
+                return FutureUtil.failedFuture(new RestException(Response.Status.PRECONDITION_FAILED, errorStr));
+            }
+            String leaderBrokerId = currentLeaderOpt.get().getBrokerId();
+            return pulsar().getNamespaceService()
+                    .createLookupResult(leaderBrokerId, false, null)
+                    .thenCompose(lookupResult -> {
+                        String redirectUrl = isRequestHttps() ? lookupResult.getLookupData().getHttpUrlTls()
+                                : lookupResult.getLookupData().getHttpUrl();
+                        if (redirectUrl == null) {
+                            log.error("Redirected broker's service url is not configured");
+                            return FutureUtil.failedFuture(new RestException(Response.Status.PRECONDITION_FAILED,
+                                    "Redirected broker's service url is not configured."));
                         }
-                        return FutureUtil.failedFuture((
-                                new WebApplicationException(Response.temporaryRedirect(redirect).build())));
-                    } catch (MalformedURLException exception) {
-                        log.error("The redirect url is malformed - {}", redirectUrl);
-                        return FutureUtil.failedFuture(new RestException(exception));
-                    }
-                });
+
+                        try {
+                            URL url = new URL(redirectUrl);
+                            URI redirect = UriBuilder.fromUri(uri.getRequestUri()).host(url.getHost())
+                                    .port(url.getPort())
+                                    .replaceQueryParam("authoritative",
+                                            false).build();
+                            // Redirect
+                            if (log.isDebugEnabled()) {
+                                log.debug("Redirecting the request call to leader - {}", redirect);
+                            }
+                            return FutureUtil.failedFuture((
+                                    new WebApplicationException(Response.temporaryRedirect(redirect).build())));
+                        } catch (MalformedURLException exception) {
+                            log.error("The redirect url is malformed - {}", redirectUrl);
+                            return FutureUtil.failedFuture(new RestException(exception));
+                        }
+                    });
+        });
     }
 
     public CompletableFuture<Void> setNamespaceBundleAffinityAsync(String bundleRange, String destinationBroker) {
