@@ -1370,8 +1370,16 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                 return;
             }
         }
-        // Unsubscribe compaction cursor and delete compacted ledger.
-        currentCompaction.thenCompose(__ -> {
+        // Unsubscribe compaction cursor and delete compacted ledger. Wait for any in-flight compaction to finish
+        // first, but don't let a compaction that completed exceptionally block the cursor deletion: the deletion
+        // would otherwise fail on every retry until the topic instance is reloaded (issue #24148). Note that a
+        // fenced topic makes the compactor's reader fail with an unrecoverable error, so a forced deletion
+        // terminates an in-flight compaction exceptionally rather than waiting for it to complete normally.
+        currentCompaction.exceptionally(compactionEx -> {
+            log.info("[{}][{}] Last compaction task failed, proceeding to delete the compaction cursor",
+                    topic, subscriptionName, compactionEx);
+            return null;
+        }).thenCompose(__ -> {
             asyncDeleteCursor(subscriptionName, unsubscribeFuture);
             return unsubscribeFuture;
         }).thenAccept(__ -> {
@@ -1389,11 +1397,7 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                 disablingCompaction.compareAndSet(true, false);
             }
         }).exceptionally(ex -> {
-            if (currentCompaction.isCompletedExceptionally()) {
-                log.warn("[{}][{}] Last compaction task failed", topic, subscriptionName);
-            } else {
-                log.warn("[{}][{}] Failed to delete cursor task failed", topic, subscriptionName);
-            }
+            log.warn("[{}][{}] Failed to delete the compaction cursor", topic, subscriptionName, ex);
             // Reset the variable: disablingCompaction,
             disablingCompaction.compareAndSet(true, false);
             unsubscribeFuture.completeExceptionally(ex);
