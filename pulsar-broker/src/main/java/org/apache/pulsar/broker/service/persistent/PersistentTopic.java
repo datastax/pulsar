@@ -987,8 +987,15 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                         new NamingException("Subscription with reserved subscription name attempted"));
             }
 
-            if (cnx.clientAddress() != null && cnx.clientAddress().toString().contains(":")
-                    && subscribeRateLimiter.isPresent()) {
+            // The subscribe rate limit must not apply to the broker-internal compaction subscription: the
+            // compactor's reader re-subscribes after the phase-two seek, and throttling that re-subscribe stalls
+            // the compaction, which in turn blocks forced topic/namespace deletion waiting on the in-flight
+            // compaction. System topics are exempt as well, consistent with the publish/dispatch rate limiters,
+            // since throttling broker-internal readers (e.g. on __change_events) can stall topic policy updates.
+            if (subscribeRateLimiter.isPresent()
+                    && !isSystemTopic()
+                    && !isCompactionSubscription(subscriptionName)
+                    && cnx.clientAddress() != null && cnx.clientAddress().toString().contains(":")) {
                 SubscribeRateLimiter.ConsumerIdentifier consumer = new SubscribeRateLimiter.ConsumerIdentifier(
                         cnx.clientAddress().toString().split(":")[0], consumerName, consumerId);
                 if (!subscribeRateLimiter.get().subscribeAvailable(consumer)
