@@ -110,6 +110,7 @@ import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.PersistentTopicInternalStats;
 import org.apache.pulsar.common.policies.data.RetentionPolicies;
+import org.apache.pulsar.common.policies.data.SubscribeRate;
 import org.apache.pulsar.common.policies.data.TenantInfoImpl;
 import org.apache.pulsar.common.protocol.Markers;
 import org.apache.pulsar.common.util.FutureUtil;
@@ -194,6 +195,34 @@ public class CompactionTest extends MockedPulsarServiceBaseTest {
 
     protected PublishingOrderCompactor getCompactor() {
         return compactor;
+    }
+
+    @Test
+    public void testCompactionNotBlockedBySubscribeRateLimit() throws Exception {
+        String namespace = "my-tenant/my-ns";
+        String topic = "persistent://" + namespace + "/compaction-with-subscribe-rate-limit";
+
+        try (Producer<byte[]> producer = pulsarClient.newProducer().topic(topic).enableBatching(false).create()) {
+            for (int i = 0; i < 10; i++) {
+                producer.newMessage().key("key" + (i % 2)).value(("my-message-" + i).getBytes()).send();
+            }
+        }
+
+        // Allow a single subscribe per consumer within a long period. The compactor's reader consumes the only
+        // token when it first subscribes, so the re-subscribe triggered by the phase-two seek would be throttled
+        // if the limit applied to the compaction subscription, stalling the compaction.
+        admin.namespaces().setSubscribeRate(namespace, new SubscribeRate(1, 3600));
+        Awaitility.await().untilAsserted(() -> {
+            PersistentTopic persistentTopic =
+                    (PersistentTopic) pulsar.getBrokerService().getTopicReference(topic).get();
+            assertTrue(persistentTopic.getSubscribeRateLimiter().isPresent());
+        });
+
+        try {
+            compactor.compact(topic).get(30, TimeUnit.SECONDS);
+        } finally {
+            admin.namespaces().removeSubscribeRate(namespace);
+        }
     }
 
     @Test
