@@ -89,12 +89,12 @@ flexible messaging model and an intuitive client API.</description>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <redirectTestOutputToFile>true</redirectTestOutputToFile>
-    <test.additional.args></test.additional.args>
+    <test.additional.args/>
     <testReuseFork>true</testReuseFork>
     <testForkCount>4</testForkCount>
     <testRealAWS>false</testRealAWS>
     <testRetryCount>1</testRetryCount>
-    <testJacocoAgentArgument></testJacocoAgentArgument>
+    <testJacocoAgentArgument/>
     <docker.organization>apachepulsar</docker.organization>
     <skipSourceReleaseAssembly>false</skipSourceReleaseAssembly>
     <skipBuildDistribution>false</skipBuildDistribution>
@@ -143,7 +143,7 @@ flexible messaging model and an intuitive client API.</description>
     <system-lambda.version>1.2.1</system-lambda.version>
     <sketches.version>0.8.3</sketches.version>
     <hbc-core.version>2.2.0</hbc-core.version>
-    <cassandra-driver-core.version>3.6.0</cassandra-driver-core.version>
+    <cassandra-driver-core.version>4.0.0</cassandra-driver-core.version>
     <aerospike-client.version>4.4.20</aerospike-client.version>
     <kafka-client.version>3.4.0</kafka-client.version>
     <rabbitmq-client.version>5.1.1</rabbitmq-client.version>
