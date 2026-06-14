@@ -1030,6 +1030,10 @@ public class ConsumerImpl<T> extends ConsumerBase<T> implements ConnectionHandle
         final String cnxStr = cnx == null ? "null" : String.valueOf(cnx.channel().remoteAddress());
         log.warn("[{}][{}] {} Closed consumer because get an error that does not support to retry: {} {}",
                 topic, subscription, cnxStr, t.getClass().getName(), t.getMessage());
+        // If the unrecoverable error occurs before the initial subscribe completes, fail the subscribe
+        // future as well; otherwise callers waiting on it (e.g. RawReader.create() / subscribeAsync())
+        // would hang forever. This is a no-op when the subscribe future has already completed.
+        subscribeFuture.completeExceptionally(t);
         closeAsync().whenComplete((__, ex) -> {
             if (ex == null) {
                 fail(t);

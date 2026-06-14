@@ -1370,12 +1370,20 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                 return;
             }
         }
-        // Unsubscribe compaction cursor and delete compacted ledger. Wait for any in-flight compaction to finish
-        // first, but don't let a compaction that completed exceptionally block the cursor deletion: the deletion
-        // would otherwise fail on every retry until the topic instance is reloaded (issue #24148). Note that a
-        // fenced topic makes the compactor's reader fail with an unrecoverable error, so a forced deletion
-        // terminates an in-flight compaction exceptionally rather than waiting for it to complete normally.
-        currentCompaction.exceptionally(compactionEx -> {
+        // Unsubscribe compaction cursor and delete compacted ledger. Normally we wait for any in-flight compaction
+        // to finish first, but a compaction that completed exceptionally must not block the cursor deletion: it
+        // would otherwise fail on every retry until the topic instance is reloaded (issue #24148).
+        //
+        // Moreover, when the topic is being closed or deleted it is already fenced and any in-flight compaction is
+        // being aborted. Waiting for that compaction to complete is both unnecessary and unsafe here: the
+        // compactor's reader is expected to fail once the topic is fenced, but that depends on how the client
+        // reconnect surfaces the failure (a retriable lookup-stage error keeps the reader reconnecting instead of
+        // failing the in-flight read), so the compaction future may stay pending for far longer than the deletion
+        // can wait. Proceed with the cursor deletion right away in that case so a forced topic/namespace deletion
+        // cannot hang (issue #24148).
+        CompletableFuture<Long> compactionToWait =
+                isClosingOrDeleting ? CompletableFuture.<Long>completedFuture(null) : currentCompaction;
+        compactionToWait.exceptionally(compactionEx -> {
             log.info("[{}][{}] Last compaction task failed, proceeding to delete the compaction cursor",
                     topic, subscriptionName, compactionEx);
             return null;
