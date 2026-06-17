@@ -225,6 +225,7 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
     private final TopicName shadowSourceTopic;
 
     public static final String DEDUPLICATION_CURSOR_NAME = "pulsar.dedup";
+    private volatile int lastMessageTtlInSeconds;
 
     public static boolean isDedupCursorName(String name) {
         return DEDUPLICATION_CURSOR_NAME.equals(name);
@@ -3738,8 +3739,9 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
         });
         producers.values().forEach(producer -> applyPoliciesFutureList.add(
                 producer.checkPermissionsAsync().thenRun(producer::checkEncryption)));
-        // Check message expiry.
-        applyPoliciesFutureList.add(FutureUtil.runWithCurrentThread(() -> checkMessageExpiry()));
+
+        // Check message expiry in the background so that it doesn't block updating or loading topic policies.
+        maybeCheckMessageExpiryOnPolicyUpdateInBackground();
 
         // Update rate limiters.
         applyPoliciesFutureList.add(FutureUtil.runWithCurrentThread(() -> updateDispatchRateLimiter()));
@@ -3762,6 +3764,26 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                 () -> updateBrokerDispatchPauseOnAckStatePersistentEnabled()));
 
         return applyPoliciesFutureList;
+    }
+
+    /**
+     * Triggers a message-expiry check on a policy update, but only when the message TTL actually changed, and
+     * runs it on the messageExpiryMonitor thread (the same thread the periodic expiry check uses) so it never
+     * blocks updating or loading topic policies. Unlike before, the expiry check is no longer part of the
+     * returned {@link #applyUpdatedTopicPolicies()} futures, so callers no longer wait for it; the periodic
+     * monitor provides eventual coverage and the check is idempotent.
+     */
+    private void maybeCheckMessageExpiryOnPolicyUpdateInBackground() {
+        int messageTtlInSeconds = topicPolicies.getMessageTTLInSeconds().get();
+        // don't check if the message expiry hasn't changed
+        if (messageTtlInSeconds > 0) {
+            if (lastMessageTtlInSeconds != messageTtlInSeconds) {
+                lastMessageTtlInSeconds = messageTtlInSeconds;
+                brokerService.getMessageExpiryMonitor().execute(this::checkMessageExpiry);
+            }
+        } else {
+            lastMessageTtlInSeconds = messageTtlInSeconds;
+        }
     }
 
     /**
