@@ -495,7 +495,7 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
                     this.isEncryptionRequired = policies.encryption_required;
 
                     isAllowAutoUpdateSchema = policies.is_allow_auto_update_schema;
-                }, getOrderedExecutor())
+                }, getPoliciesNotifyThread())
                 .thenCompose(ignore -> initTopicPolicy())
                 .thenCompose(ignore -> removeOrphanReplicationCursors())
                 .exceptionally(ex -> {
@@ -4733,6 +4733,7 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
     protected CompletableFuture<Void> initTopicPolicy() {
         final var topicPoliciesService = brokerService.pulsar().getTopicPoliciesService();
         final var partitionedTopicName = TopicName.getPartitionedTopicName(topic);
+
         return topicPoliciesService.registerListenerAsync(partitionedTopicName, this).thenCompose(registered -> {
             if (!registered) {
                 return CompletableFuture.completedFuture(null);
@@ -4743,11 +4744,11 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
             return topicPoliciesService.getTopicPoliciesAsync(partitionedTopicName,
                     TopicPoliciesService.GetType.GLOBAL_ONLY)
             .thenAcceptAsync(optionalPolicies -> optionalPolicies.ifPresent(this::onUpdate),
-                    brokerService.getTopicOrderedExecutor())
+                    getPoliciesNotifyThread())
             .thenCompose(__ -> topicPoliciesService.getTopicPoliciesAsync(partitionedTopicName,
                     TopicPoliciesService.GetType.LOCAL_ONLY))
             .thenAcceptAsync(optionalPolicies -> optionalPolicies.ifPresent(this::onUpdate),
-                            brokerService.getTopicOrderedExecutor());
+                    getPoliciesNotifyThread());
         });
     }
 

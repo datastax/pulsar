@@ -135,6 +135,36 @@ public class SystemTopicBasedTopicPoliciesServiceTest extends MockedPulsarServic
     }
 
     @Test
+    public void testListenerNotificationRunsOffSharedReaderThread() throws Exception {
+        // Regression test for #26037: topic-policy listener callbacks must not run on the single,
+        // process-wide shared "broker-client-shared-internal-executor" reader thread. A slow or blocking
+        // onUpdate there serializes — and can stall — topic-policy loading for every namespace. The
+        // notification must instead be dispatched to the per-topic ordered executor ("broker-topic-workers").
+
+        // Initialize the policy cache and start the change-events reader for the namespace.
+        systemTopicBasedTopicPoliciesService.updateTopicPoliciesAsync(TOPIC1, false, false, topicPolicies ->
+                topicPolicies.setMaxConsumerPerTopic(10)).get();
+        Awaitility.await().untilAsserted(() -> Assert.assertTrue(systemTopicBasedTopicPoliciesService
+                .getPoliciesCacheInit(TOPIC1.getNamespaceObject()).isDone()));
+
+        // Register a listener that records the thread its onUpdate runs on.
+        CompletableFuture<String> onUpdateThreadName = new CompletableFuture<>();
+        TopicPolicyListener listener = data -> onUpdateThreadName.complete(Thread.currentThread().getName());
+        systemTopicBasedTopicPoliciesService.registerListenerAsync(TOPIC1, listener).get();
+
+        // A live policy update flows through readMorePoliciesAsync -> notifyListener -> listener.onUpdate.
+        systemTopicBasedTopicPoliciesService.updateTopicPoliciesAsync(TOPIC1, false, false, topicPolicies ->
+                topicPolicies.setMaxConsumerPerTopic(20)).get();
+
+        String threadName = onUpdateThreadName.get(30, TimeUnit.SECONDS);
+        assertFalse("listener.onUpdate must not run on the shared broker-client reader thread, but ran on: "
+                        + threadName,
+                threadName.contains("broker-client-shared-internal-executor"));
+        assertTrue("listener.onUpdate should run on the per-topic ordered executor, but ran on: " + threadName,
+                threadName.contains("broker-topic-workers"));
+    }
+
+    @Test
     public void testGetPolicy() throws Exception {
 
         systemTopicBasedTopicPoliciesService.updateTopicPoliciesAsync(TOPIC1, false, false, topicPolicies ->
