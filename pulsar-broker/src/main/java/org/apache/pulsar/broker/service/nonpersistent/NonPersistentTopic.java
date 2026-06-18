@@ -81,7 +81,6 @@ import org.apache.pulsar.common.api.proto.KeySharedMeta;
 import org.apache.pulsar.common.naming.SystemTopicNames;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.BacklogQuota;
-import org.apache.pulsar.common.policies.data.ClusterPolicies.ClusterUrl;
 import org.apache.pulsar.common.policies.data.ManagedLedgerInternalStats.CursorStats;
 import org.apache.pulsar.common.policies.data.PersistentTopicInternalStats;
 import org.apache.pulsar.common.policies.data.Policies;
@@ -338,7 +337,7 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                     false, cnx, cnx.getAuthRole(), metadata, readCompacted, keySharedMeta, MessageId.latest,
                     DEFAULT_CONSUMER_EPOCH, schemaType);
             if (isMigrated()) {
-                consumer.topicMigrated(getMigratedClusterUrl());
+                getMigratedClusterUrlAsync().thenAccept(consumer::topicMigrated);
             }
 
             addConsumerToSubscription(subscription, consumer).thenRun(() -> {
@@ -1015,20 +1014,21 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
             return CompletableFuture.completedFuture(null);
         }
 
-        Optional<ClusterUrl> url = getMigratedClusterUrl();
-        if (url.isPresent()) {
-            this.migrated = true;
-            producers.forEach((__, producer) -> {
-                producer.topicMigrated(url);
-            });
-            subscriptions.forEach((__, sub) -> {
-                sub.getConsumers().forEach((consumer) -> {
-                    consumer.topicMigrated(url);
+        return getMigratedClusterUrlAsync().thenCompose(url -> {
+            if (url.isPresent()) {
+                this.migrated = true;
+                producers.forEach((__, producer) -> {
+                    producer.topicMigrated(url);
                 });
-            });
-            return disconnectReplicators().thenCompose(__ -> checkAndUnsubscribeSubscriptions());
-        }
-        return CompletableFuture.completedFuture(null);
+                subscriptions.forEach((__, sub) -> {
+                    sub.getConsumers().forEach((consumer) -> {
+                        consumer.topicMigrated(url);
+                    });
+                });
+                return disconnectReplicators().thenCompose(__ -> checkAndUnsubscribeSubscriptions());
+            }
+            return CompletableFuture.<Void>completedFuture(null);
+        });
     }
 
     private CompletableFuture<Void> checkAndUnsubscribeSubscriptions() {

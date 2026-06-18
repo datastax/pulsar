@@ -1335,8 +1335,8 @@ public abstract class AbstractTopic implements Topic, TopicPolicyListener {
             subscribeRateInBroker(brokerService.pulsar().getConfiguration()));
     }
 
-    public Optional<ClusterUrl> getMigratedClusterUrl() {
-        return getMigratedClusterUrl(brokerService.getPulsar(), topic);
+    public CompletableFuture<Optional<ClusterUrl>> getMigratedClusterUrlAsync() {
+        return getMigratedClusterUrlAsync(brokerService.getPulsar(), topic);
     }
 
     public static CompletableFuture<Boolean> isClusterMigrationEnabled(PulsarService pulsar,
@@ -1374,16 +1374,6 @@ public abstract class AbstractTopic implements Topic, TopicPolicyListener {
         return pulsar.getPulsarResources().getLocalPolicies()
                 .getLocalPoliciesAsync(TopicName.get(topic).getNamespaceObject())
                 .thenApply(policies -> policies.isPresent() && policies.get().migrated);
-    }
-
-    public static Optional<ClusterUrl> getMigratedClusterUrl(PulsarService pulsar, String topic) {
-        try {
-            return getMigratedClusterUrlAsync(pulsar, topic)
-                    .get(pulsar.getPulsarResources().getClusterResources().getOperationTimeoutSec(), TimeUnit.SECONDS);
-        } catch (Exception e) {
-            log.warn("[{}] Failed to get migration cluster URL", topic, e);
-        }
-        return Optional.empty();
     }
 
     public boolean isSystemCursor(String sub) {

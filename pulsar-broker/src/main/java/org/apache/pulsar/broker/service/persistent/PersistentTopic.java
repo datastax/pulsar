@@ -778,18 +778,23 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
             // close all producers
             CompletableFuture<Void> disconnectProducersFuture;
             if (producers.size() > 0) {
-                List<CompletableFuture<Void>> futures = new ArrayList<>();
                 // send migration url metadata to producers before disconnecting them
-                if (isMigrated()) {
-                    if (!shouldProducerMigrate()) {
+                CompletableFuture<Void> sendMigrationUrlFuture;
+                if (isMigrated() && shouldProducerMigrate()) {
+                    sendMigrationUrlFuture = getMigratedClusterUrlAsync().thenAccept(clusterUrl ->
+                            producers.forEach((__, producer) -> producer.topicMigrated(clusterUrl)));
+                } else {
+                    if (isMigrated()) {
                         log.info("Topic {} is migrated but replication-backlog exists or "
                                 + "subs not created. Closing producers.", topic);
-                    } else {
-                        producers.forEach((__, producer) -> producer.topicMigrated(getMigratedClusterUrl()));
                     }
+                    sendMigrationUrlFuture = CompletableFuture.completedFuture(null);
                 }
-                producers.forEach((__, producer) -> futures.add(producer.disconnect()));
-                disconnectProducersFuture = FutureUtil.waitForAll(futures);
+                disconnectProducersFuture = sendMigrationUrlFuture.thenCompose(v -> {
+                    List<CompletableFuture<Void>> futures = new ArrayList<>();
+                    producers.forEach((__, producer) -> futures.add(producer.disconnect()));
+                    return FutureUtil.waitForAll(futures);
+                });
             } else {
                 disconnectProducersFuture = CompletableFuture.completedFuture(null);
             }
@@ -3264,39 +3269,39 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
             return CompletableFuture.completedFuture(null);
         }
 
-        Optional<ClusterUrl> clusterUrl = getMigratedClusterUrl();
-
-        if (!clusterUrl.isPresent()) {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        if (isReplicated()) {
-            if (isReplicationBacklogExist()) {
-                if (!ledger.isMigrated()) {
-                    log.info("{} applying migration with replication backlog", topic);
-                    ledger.asyncMigrate();
-                }
-                if (log.isDebugEnabled()) {
-                    log.debug("{} has replication backlog and applied migration", topic);
-                }
-                return CompletableFuture.completedFuture(null);
+        return getMigratedClusterUrlAsync().thenCompose(clusterUrl -> {
+            if (!clusterUrl.isPresent()) {
+                return CompletableFuture.<Void>completedFuture(null);
             }
-        }
 
-        return initMigration().thenCompose(subCreated -> {
-            migrationSubsCreated = true;
-            CompletableFuture<?> migrated = !isMigrated() ? ledger.asyncMigrate()
-                    : CompletableFuture.completedFuture(null);
-            return migrated.thenApply(__ -> {
-                subscriptions.forEach((name, sub) -> {
-                    if (sub.isSubscriptionMigrated()) {
-                        sub.getConsumers().forEach(Consumer::checkAndApplyTopicMigration);
+            if (isReplicated()) {
+                if (isReplicationBacklogExist()) {
+                    if (!ledger.isMigrated()) {
+                        log.info("{} applying migration with replication backlog", topic);
+                        ledger.asyncMigrate();
                     }
-                });
-                return null;
-            }).thenCompose(__ -> checkAndDisconnectReplicators())
-                    .thenCompose(__ -> checkAndUnsubscribeSubscriptions())
-                    .thenCompose(__ -> checkAndDisconnectProducers());
+                    if (log.isDebugEnabled()) {
+                        log.debug("{} has replication backlog and applied migration", topic);
+                    }
+                    return CompletableFuture.<Void>completedFuture(null);
+                }
+            }
+
+            return initMigration().thenCompose(subCreated -> {
+                migrationSubsCreated = true;
+                CompletableFuture<?> migrated = !isMigrated() ? ledger.asyncMigrate()
+                        : CompletableFuture.completedFuture(null);
+                return migrated.thenApply(__ -> {
+                    subscriptions.forEach((name, sub) -> {
+                        if (sub.isSubscriptionMigrated()) {
+                            sub.getConsumers().forEach(consumer -> consumer.topicMigrated(clusterUrl));
+                        }
+                    });
+                    return null;
+                }).thenCompose(__ -> checkAndDisconnectReplicators())
+                        .thenCompose(__ -> checkAndUnsubscribeSubscriptions())
+                        .thenCompose(__ -> checkAndDisconnectProducers());
+            });
         });
     }
 

@@ -469,7 +469,8 @@ public abstract class AbstractBaseDispatcher extends EntryFilterSupport implemen
 
     public static void checkAndApplyReachedEndOfTopicOrTopicMigration(PersistentTopic topic, List<Consumer> consumers) {
         if (topic.isMigrated()) {
-            consumers.forEach(c -> c.topicMigrated(topic.getMigratedClusterUrl()));
+            topic.getMigratedClusterUrlAsync()
+                    .thenAccept(clusterUrl -> consumers.forEach(c -> c.topicMigrated(clusterUrl)));
         } else {
             consumers.forEach(Consumer::reachedEndOfTopic);
         }
