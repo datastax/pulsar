@@ -542,14 +542,18 @@ public abstract class AbstractTopic implements Topic, TopicPolicyListener {
                 && maxProducers <= USER_CREATED_PRODUCER_COUNTER_UPDATER.get(this);
     }
 
+    protected TopicPolicyListener getTopicPolicyListener() {
+        return this;
+    }
+
     protected void registerTopicPolicyListener() {
         brokerService.getPulsar().getTopicPoliciesService()
-                .registerListenerAsync(TopicName.getPartitionedTopicName(topic), this);
+                .registerListenerAsync(TopicName.getPartitionedTopicName(topic), getTopicPolicyListener());
     }
 
     protected void unregisterTopicPolicyListener() {
         brokerService.getPulsar().getTopicPoliciesService()
-                .unregisterListener(TopicName.getPartitionedTopicName(topic), this);
+                .unregisterListener(TopicName.getPartitionedTopicName(topic), getTopicPolicyListener());
     }
 
     protected boolean isSameAddressProducersExceeded(Producer producer) {
