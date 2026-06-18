@@ -1,0 +1,90 @@
+{
+  "description": "Example MCP Server Configuration for Bob",
+  "server_location": "/Users/hariharan.shankar/Documents/IBM Bob/MCP/pulsar-pr-server",
+  "configuration_file": "/Users/hariharan.shankar/.bob/settings/mcp_settings.json",
+  
+  "setup_steps": [
+    "1. Generate GitHub Personal Access Token at https://github.com/settings/tokens",
+    "2. Select scopes: 'repo' and 'read:org'",
+    "3. Copy the token (starts with 'ghp_')",
+    "4. Edit /Users/hariharan.shankar/.bob/settings/mcp_settings.json",
+    "5. Replace empty GITHUB_TOKEN value with your token",
+    "6. Restart Bob"
+  ],
+  
+  "example_configuration": {
+    "mcpServers": {
+      "pulsar-pr": {
+        "command": "node",
+        "args": [
+          "/Users/hariharan.shankar/Documents/IBM Bob/MCP/pulsar-pr-server/build/index.js"
+        ],
+        "env": {
+          "GITHUB_TOKEN": "ghp_YOUR_TOKEN_HERE"
+        },
+        "disabled": false,
+        "alwaysAllow": [],
+        "disabledTools": []
+      }
+    }
+  },
+  
+  "available_tools": [
+    {
+      "name": "analyze_pr",
+      "description": "Comprehensive PR analysis",
+      "example": "Analyze PR #23456"
+    },
+    {
+      "name": "find_cherry_pick_candidates",
+      "description": "Find commits needing cherry-pick",
+      "example": "Find cherry-pick candidates for branch-3.0"
+    },
+    {
+      "name": "check_commit_cherry_pick",
+      "description": "Check if commit needs cherry-pick",
+      "example": "Check if commit abc123 is in branch-3.0"
+    },
+    {
+      "name": "get_pr_diff",
+      "description": "Get PR diff details",
+      "example": "Get diff for PR #23456"
+    },
+    {
+      "name": "list_open_prs",
+      "description": "List pull requests",
+      "example": "List open PRs"
+    },
+    {
+      "name": "monitor_pr_ci_status",
+      "description": "Real-time CI monitoring with recommendations",
+      "example": "Monitor CI status for PR #23456",
+      "agentic": true
+    },
+    {
+      "name": "scan_recent_prs_for_ci_issues",
+      "description": "Proactive PR scanning for CI problems",
+      "example": "Scan recent PRs for CI issues",
+      "agentic": true
+    },
+    {
+      "name": "analyze_ci_failure_patterns",
+      "description": "Intelligent failure categorization",
+      "example": "Analyze CI failures for PR #23456",
+      "agentic": true
+    },
+    {
+      "name": "get_ci_fix_suggestions",
+      "description": "Actionable fix recommendations",
+      "example": "Get fix suggestions for PR #23456",
+      "agentic": true
+    }
+  ],
+  
+  "test_commands": [
+    "List open PRs in the Pulsar repository",
+    "Scan recent PRs for CI issues",
+    "Monitor CI status for the latest PR",
+    "Find commits that need cherry-picking to branch-3.0"
+  ]
+}
