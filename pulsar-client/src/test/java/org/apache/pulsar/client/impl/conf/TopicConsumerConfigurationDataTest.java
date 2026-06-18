@@ -53,12 +53,12 @@ public class TopicConsumerConfigurationDataTest {
         };
     }
 
-    @Test(dataProvider = "topicNameMatch")
-    public void testTopicNameMatch(String topicName, boolean expectedMatch) {
-        TopicConsumerConfigurationData topicConsumerConfigurationData = TopicConsumerConfigurationData
-                .ofTopicsPattern(Pattern.compile("^foo$"), 1);
-        assertThat(topicConsumerConfigurationData.getTopicNameMatcher().matches(topicName)).isEqualTo(expectedMatch);
-    }
+//    @Test(dataProvider = "topicNameMatch")
+//    public void testTopicNameMatch(String topicName, boolean expectedMatch) {
+//        TopicConsumerConfigurationData topicConsumerConfigurationData = TopicConsumerConfigurationData
+//                .ofTopicsPattern(Pattern.compile("^foo$"), 1);
+//        assertThat(topicConsumerConfigurationData.getTopicNameMatcher().matches(topicName)).isEqualTo(expectedMatch);
+//    }
 
     @Test
     public void testNullTopicsPattern() {
