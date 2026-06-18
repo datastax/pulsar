@@ -25,7 +25,7 @@ import static org.apache.commons.lang3.StringUtils.EMPTY;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
 import static org.apache.pulsar.broker.admin.impl.PersistentTopicsBase.unsafeGetPartitionedTopicMetadataAsync;
 import static org.apache.pulsar.broker.lookup.TopicLookupBase.lookupTopicAsync;
-import static org.apache.pulsar.broker.service.persistent.PersistentTopic.getMigratedClusterUrl;
+import static org.apache.pulsar.broker.service.persistent.PersistentTopic.getMigratedClusterUrlAsync;
 import static org.apache.pulsar.broker.service.schema.BookkeeperSchemaStorage.ignoreUnrecoverableBKException;
 import static org.apache.pulsar.common.api.proto.ProtocolVersion.v5;
 import static org.apache.pulsar.common.naming.Constants.WEBSOCKET_DUMMY_ORIGINAL_PRINCIPLE;
@@ -1415,8 +1415,9 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
                                         }
                                     });
                         })
-                        .thenAcceptAsync(consumer -> {
-                            if (consumer.checkAndApplyTopicMigration()) {
+                        .thenComposeAsync(consumer -> consumer.checkAndApplyTopicMigrationAsync()
+                                .thenAcceptAsync(migrated -> {
+                            if (migrated) {
                                 log.info("[{}] Disconnecting consumer {} on migrated subscription on topic {} / {}",
                                         remoteAddress, consumerId, subscriptionName, topicName);
                                 consumers.remove(consumerId, consumerFuture);
@@ -1449,7 +1450,7 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
                                 consumers.remove(consumerId, consumerFuture);
                             }
 
-                        }, ctx.executor())
+                        }, ctx.executor()), ctx.executor())
                         .exceptionallyAsync(exception -> {
                             if (exception.getCause() instanceof ConsumerBusyException) {
                                 if (log.isDebugEnabled()) {
@@ -1460,23 +1461,12 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
                                             exception.getCause().getMessage());
                                 }
                             } else if (exception.getCause() instanceof BrokerServiceException.TopicMigratedException) {
-                                Optional<ClusterUrl> clusterURL = getMigratedClusterUrl(service.getPulsar(),
-                                        topicName.toString());
-                                if (clusterURL.isPresent()) {
-                                    log.info("[{}] redirect migrated consumer to topic {}: "
-                                                    + "consumerId={}, subName={}, {}", remoteAddress,
-                                            topicName, consumerId, subscriptionName, exception.getCause().getMessage());
-                                    boolean msgSent = commandSender.sendTopicMigrated(ResourceType.Consumer, consumerId,
-                                            clusterURL.get().getBrokerServiceUrl(),
-                                            clusterURL.get().getBrokerServiceUrlTls());
-                                    if (!msgSent) {
-                                        log.info("consumer client doesn't support topic migration handling {}-{}-{}",
-                                                topicName, remoteAddress, consumerId);
-                                    }
-                                    consumers.remove(consumerId, consumerFuture);
-                                    closeConsumer(consumerId, Optional.empty());
-                                    return null;
-                                }
+                                getMigratedClusterUrlAsync(service.getPulsar(), topicName.toString())
+                                        .exceptionally(e -> Optional.empty())
+                                        .thenAcceptAsync(clusterURL -> redirectOrFailMigratedConsumer(requestId,
+                                                consumerId, subscriptionName, topicName, consumerFuture, exception,
+                                                clusterURL), ctx.executor());
+                                return null;
                             } else if (exception.getCause() instanceof BrokerServiceException) {
                                 log.warn("[{}][{}][{}] Failed to create consumer: consumerId={}, {}",
                                          remoteAddress, topicName, subscriptionName,
@@ -1512,6 +1502,89 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
             commandSender.sendErrorResponse(requestId, ServerError.AuthorizationError, ex.getMessage());
             return null;
         }, ctx.executor());
+    }
+
+    private void redirectOrFailMigratedConsumer(long requestId, long consumerId, String subscriptionName,
+            TopicName topicName, CompletableFuture<Consumer> consumerFuture, Throwable exception,
+            Optional<ClusterUrl> clusterURL) {
+        if (clusterURL.isPresent()) {
+            log.info("[{}] redirect migrated consumer to topic {}: consumerId={}, subName={}, {}", remoteAddress,
+                    topicName, consumerId, subscriptionName, exception.getCause().getMessage());
+            boolean msgSent = commandSender.sendTopicMigrated(ResourceType.Consumer, consumerId,
+                    clusterURL.get().getBrokerServiceUrl(),
+                    clusterURL.get().getBrokerServiceUrlTls());
+            if (!msgSent) {
+                log.info("consumer client doesn't support topic migration handling {}-{}-{}",
+                        topicName, remoteAddress, consumerId);
+            }
+            consumers.remove(consumerId, consumerFuture);
+            closeConsumer(consumerId, Optional.empty());
+        } else {
+            // If client timed out, the future would have been completed by subsequent close.
+            // Send error back to client, only if not completed already.
+            if (consumerFuture.completeExceptionally(exception)) {
+                commandSender.sendErrorResponse(requestId,
+                        BrokerServiceException.getClientErrorCode(exception.getCause()),
+                        exception.getCause().getMessage());
+            }
+            consumers.remove(consumerId, consumerFuture);
+        }
+    }
+
+    private void redirectOrFailMigratedProducer(long requestId, long producerId, String producerName,
+            TopicName topicName, CompletableFuture<Producer> producerFuture, Throwable exception,
+            Optional<ClusterUrl> clusterURL) {
+        if (clusterURL.isPresent()) {
+            log.info("[{}] redirect migrated producer to topic {}: producerId={}, producerName = {}, {}",
+                    remoteAddress, topicName, producerId, producerName, exception.getCause().getMessage());
+            boolean msgSent = commandSender.sendTopicMigrated(ResourceType.Producer, producerId,
+                    clusterURL.get().getBrokerServiceUrl(), clusterURL.get().getBrokerServiceUrlTls());
+            if (!msgSent) {
+                log.info("client doesn't support topic migration handling {}-{}-{}", topicName,
+                        remoteAddress, producerId);
+            }
+            producers.remove(producerId, producerFuture);
+            closeProducer(producerId, -1L, Optional.empty());
+        } else {
+            log.error("[{}] Failed to create topic {}, producerId={}", remoteAddress, topicName, producerId,
+                    exception);
+            if (producerFuture.completeExceptionally(exception)) {
+                commandSender.sendErrorResponse(requestId,
+                        BrokerServiceException.getClientErrorCode(exception.getCause()),
+                        exception.getCause().getMessage());
+            }
+            producers.remove(producerId, producerFuture);
+        }
+    }
+
+    private void redirectOrFailMigratedProducerInQueue(long requestId, long producerId, String producerName,
+            TopicName topicName, Topic topic, Producer producer, CompletableFuture<Producer> producerFuture,
+            Throwable ex, Optional<ClusterUrl> clusterURL) {
+        if (clusterURL.isPresent() && topic.shouldProducerMigrate()) {
+            log.info("[{}] redirect migrated producer to topic {}: producerId={}, producerName = {}, {}",
+                    remoteAddress, topicName, producerId, producerName, ex.getCause().getMessage());
+            boolean msgSent = commandSender.sendTopicMigrated(ResourceType.Producer, producerId,
+                    clusterURL.get().getBrokerServiceUrl(), clusterURL.get().getBrokerServiceUrlTls());
+            if (!msgSent) {
+                log.info("client doesn't support topic migration handling {}-{}-{}", topic,
+                        remoteAddress, producerId);
+            }
+            closeProducer(producer);
+        } else {
+            if (clusterURL.isPresent()) {
+                log.info("Topic {} is migrated but replication backlog exist: "
+                                + "producerId = {}, producerName = {}, {}", topicName,
+                        producerId, producerName, ex.getCause().getMessage());
+            } else {
+                log.warn("[{}] failed producer because migration url not configured topic {}: producerId={}, {}",
+                        remoteAddress, topicName, producerId, ex.getCause().getMessage());
+            }
+            producer.closeNow(true);
+            if (producerFuture.completeExceptionally(ex)) {
+                commandSender.sendErrorResponse(requestId,
+                        BrokerServiceException.getClientErrorCode(ex), ex.getMessage());
+            }
+        }
     }
 
     private SchemaData getSchema(Schema protocolSchema) {
@@ -1747,21 +1820,11 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
                     producers.remove(producerId, producerFuture);
                     return null;
                 } else if (cause instanceof BrokerServiceException.TopicMigratedException) {
-                    Optional<ClusterUrl> clusterURL = getMigratedClusterUrl(service.getPulsar(), topicName.toString());
-                    if (clusterURL.isPresent()) {
-                        log.info("[{}] redirect migrated producer to topic {}: "
-                                        + "producerId={}, producerName = {}, {}", remoteAddress,
-                                topicName, producerId, producerName, cause.getMessage());
-                        boolean msgSent = commandSender.sendTopicMigrated(ResourceType.Producer, producerId,
-                                clusterURL.get().getBrokerServiceUrl(), clusterURL.get().getBrokerServiceUrlTls());
-                        if (!msgSent) {
-                            log.info("client doesn't support topic migration handling {}-{}-{}", topicName,
-                                    remoteAddress, producerId);
-                        }
-                        producers.remove(producerId, producerFuture);
-                        closeProducer(producerId, -1L, Optional.empty());
-                        return null;
-                    }
+                    getMigratedClusterUrlAsync(service.getPulsar(), topicName.toString())
+                            .exceptionally(e -> Optional.empty())
+                            .thenAcceptAsync(clusterURL -> redirectOrFailMigratedProducer(requestId, producerId,
+                                    producerName, topicName, producerFuture, exception, clusterURL), ctx.executor());
+                    return null;
                 }
 
                 // Do not print stack traces for expected exceptions
@@ -1847,29 +1910,12 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
             producers.remove(producerId, producerFuture);
         }, ctx.executor()).exceptionallyAsync(ex -> {
             if (ex.getCause() instanceof BrokerServiceException.TopicMigratedException) {
-                Optional<ClusterUrl> clusterURL = getMigratedClusterUrl(service.getPulsar(), topic.getName());
-                if (clusterURL.isPresent()) {
-                    if (!topic.shouldProducerMigrate()) {
-                        log.info("Topic {} is migrated but replication backlog exist: "
-                                        + "producerId = {}, producerName = {}, {}", topicName,
-                                producerId, producerName, ex.getCause().getMessage());
-                    } else {
-                        log.info("[{}] redirect migrated producer to topic {}: "
-                                        + "producerId={}, producerName = {}, {}", remoteAddress,
-                                topicName, producerId, producerName, ex.getCause().getMessage());
-                        boolean msgSent = commandSender.sendTopicMigrated(ResourceType.Producer, producerId,
-                                clusterURL.get().getBrokerServiceUrl(), clusterURL.get().getBrokerServiceUrlTls());
-                        if (!msgSent) {
-                            log.info("client doesn't support topic migration handling {}-{}-{}", topic,
-                                    remoteAddress, producerId);
-                        }
-                        closeProducer(producer);
-                        return null;
-                    }
-                } else {
-                    log.warn("[{}] failed producer because migration url not configured topic {}: producerId={}, {}",
-                            remoteAddress, topicName, producerId, ex.getCause().getMessage());
-                }
+                getMigratedClusterUrlAsync(service.getPulsar(), topic.getName())
+                        .exceptionally(e -> Optional.empty())
+                        .thenAcceptAsync(clusterURL -> redirectOrFailMigratedProducerInQueue(requestId, producerId,
+                                producerName, topicName, topic, producer, producerFuture, ex, clusterURL),
+                                ctx.executor());
+                return null;
             } else if (ex.getCause() instanceof BrokerServiceException.ProducerFencedException) {
                 if (log.isDebugEnabled()) {
                     log.debug("[{}] Failed to add producer to topic {}: producerId={}, {}",
