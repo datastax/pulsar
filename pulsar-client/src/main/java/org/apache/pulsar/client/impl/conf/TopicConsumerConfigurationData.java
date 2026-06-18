@@ -67,7 +67,7 @@ public class TopicConsumerConfigurationData implements Serializable {
 
             @Override
             public boolean matches(String topicName) {
-                return topicsPattern.matcher(topicName).matches();
+                return !topicsPattern.matcher(topicName).matches();
             }
         }
 
