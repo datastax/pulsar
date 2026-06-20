@@ -18,6 +18,11 @@
  */
 package org.apache.pulsar.functions.worker;
 
+import com.google.common.annotations.VisibleForTesting;
+import io.netty.util.concurrent.DefaultThreadFactory;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.client.api.Consumer;
@@ -42,6 +47,11 @@ public class LeaderService implements AutoCloseable, ConsumerEventListener {
     private final WorkerConfig workerConfig;
     private final PulsarClient pulsarClient;
     private volatile boolean isLeader = false;
+    // The consumer event listener callbacks (becameActive/becameInactive) run the blocking
+    // leader-election routines on this dedicated single-threaded executor so that the Pulsar client's
+    // shared consumer-listener thread is not blocked. The single thread also preserves event ordering.
+    private final ExecutorService executor =
+            Executors.newSingleThreadExecutor(new DefaultThreadFactory("function-worker-leader"));
 
     static final String COORDINATION_TOPIC_SUBSCRIPTION = "participants";
 
@@ -89,6 +99,12 @@ public class LeaderService implements AutoCloseable, ConsumerEventListener {
 
     @Override
     public void becameActive(Consumer<?> consumer, int partitionId) {
+        // Run the (blocking) become-leader routine on a dedicated executor so the consumer
+        // event-listener thread, which is shared with the Pulsar client, is not blocked.
+        executor.execute(() -> becameActiveInternal(consumer, partitionId));
+    }
+
+    private void becameActiveInternal(Consumer<?> consumer, int partitionId) {
         synchronized (this) {
             if (isLeader) {
                 return;
@@ -148,7 +164,11 @@ public class LeaderService implements AutoCloseable, ConsumerEventListener {
     }
 
     @Override
-    public synchronized void becameInactive(Consumer<?> consumer, int partitionId) {
+    public void becameInactive(Consumer<?> consumer, int partitionId) {
+        executor.execute(() -> becameInactiveInternal(consumer, partitionId));
+    }
+
+    private synchronized void becameInactiveInternal(Consumer<?> consumer, int partitionId) {
         if (isLeader) {
             log.info("Worker {} lost the leadership.", consumerName);
             isLeader = false;
@@ -176,10 +196,16 @@ public class LeaderService implements AutoCloseable, ConsumerEventListener {
         return isLeader;
     }
 
+    @VisibleForTesting
+    void joinPendingEventTasks() throws InterruptedException, ExecutionException {
+        executor.submit(() -> { }).get();
+    }
+
     @Override
     public void close() throws PulsarClientException {
         if (consumer != null) {
             consumer.close();
         }
+        executor.shutdown();
     }
 }
