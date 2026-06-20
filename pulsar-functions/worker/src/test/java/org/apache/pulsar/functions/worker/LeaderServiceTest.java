@@ -135,6 +135,7 @@ public class LeaderServiceTest {
         verify(mockClient, times(1)).newConsumer();
 
         listenerHolder.get().becameActive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         assertTrue(leaderService.isLeader());
 
         verify(functionMetadataManager, times(1)).getIsInitialized();
@@ -150,6 +151,7 @@ public class LeaderServiceTest {
         verify(schedulerManager, times((1))).initialize(any());
 
         listenerHolder.get().becameInactive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         assertFalse(leaderService.isLeader());
 
         verify(functionAssignmentTailer, times(1)).startFromMessage(messageId);
@@ -165,6 +167,7 @@ public class LeaderServiceTest {
         verify(mockClient, times(1)).newConsumer();
 
         listenerHolder.get().becameActive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         assertTrue(leaderService.isLeader());
 
         verify(functionMetadataManager, times(1)).acquireExclusiveWrite(any());
@@ -176,6 +179,7 @@ public class LeaderServiceTest {
         verify(schedulerManager, times((1))).initialize(any());
 
         listenerHolder.get().becameInactive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         assertFalse(leaderService.isLeader());
 
         verify(functionAssignmentTailer, times(1)).start();
@@ -195,6 +199,7 @@ public class LeaderServiceTest {
         when(schedulerManager.acquireExclusiveWrite(any())).thenThrow(new WorkerUtils.NotLeaderAnymore());
 
         listenerHolder.get().becameActive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         // should have failed to become leader
         assertFalse(leaderService.isLeader());
 
@@ -211,6 +216,7 @@ public class LeaderServiceTest {
         verify(schedulerManager, times((0))).initialize(any());
 
         listenerHolder.get().becameInactive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         assertFalse(leaderService.isLeader());
 
         verify(functionAssignmentTailer, times(0)).startFromMessage(messageId);
@@ -231,6 +237,7 @@ public class LeaderServiceTest {
         when(functionMetadataManager.acquireExclusiveWrite(any())).thenThrow(new WorkerUtils.NotLeaderAnymore());
 
         listenerHolder.get().becameActive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         // should have failed to become leader
         assertFalse(leaderService.isLeader());
 
@@ -247,6 +254,7 @@ public class LeaderServiceTest {
         verify(schedulerManager, times((0))).initialize(any());
 
         listenerHolder.get().becameInactive(mockConsumer, 0);
+        leaderService.joinPendingEventTasks();
         assertFalse(leaderService.isLeader());
 
         verify(functionAssignmentTailer, times(0)).startFromMessage(messageId);
