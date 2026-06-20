@@ -276,8 +276,7 @@ flexible messaging model and an intuitive client API.</description>
     <javax.servlet-api>3.1.0</javax.servlet-api>
     <caffeine.version>2.9.1</caffeine.version>
     <java-semver.version>0.9.0</java-semver.version>
-    <jline.version>2.14.6</jline.version>
-    <jline3.version>3.21.0</jline3.version>
+    <jline3.version>4.2.1</jline3.version>
     <hppc.version>0.9.1</hppc.version>
     <spark-streaming_2.10.version>2.1.0</spark-streaming_2.10.version>
     <assertj-core.version>3.27.7</assertj-core.version>
@@ -315,8 +314,8 @@ flexible messaging model and an intuitive client API.</description>
     <opentelemetry.alpha.version>${opentelemetry.version}-alpha</opentelemetry.alpha.version>
     <opentelemetry.instrumentation.version>1.33.6</opentelemetry.instrumentation.version>
     <opentelemetry.instrumentation.alpha.version>${opentelemetry.instrumentation.version}-alpha</opentelemetry.instrumentation.alpha.version>
-    <opentelemetry.semconv.version>1.29.0-alpha</opentelemetry.semconv.version>
-    <picocli.version>4.7.5</picocli.version>
+    <opentelemetry.semconv.version>1.37.0</opentelemetry.semconv.version>
+    <picocli.version>4.7.7</picocli.version>
     <re2j.version>1.8</re2j.version>
     <completable-futures.version>0.3.6</completable-futures.version>
     <failsafe.version>3.3.2</failsafe.version>
