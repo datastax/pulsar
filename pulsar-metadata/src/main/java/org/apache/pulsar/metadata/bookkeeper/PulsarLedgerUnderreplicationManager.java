@@ -30,6 +30,7 @@ import static org.apache.pulsar.metadata.bookkeeper.AbstractMetadataDriver.BLOCK
 import com.google.common.base.Joiner;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.TextFormat;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,6 +46,8 @@ import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -116,6 +119,11 @@ public class PulsarLedgerUnderreplicationManager implements LedgerUnderreplicati
             new ArrayList<>();
     private final List<BookkeeperInternalCallbacks.GenericCallback<Void>> lostBookieRecoveryDelayCallbacks =
             new ArrayList<>();
+
+    // Registered callbacks can perform synchronous metadata-store reads, so run them on a dedicated
+    // single-threaded executor instead of the metadata-store notification thread (and outside the lock).
+    private final ExecutorService notificationCallbackExecutor =
+            Executors.newSingleThreadExecutor(new DefaultThreadFactory("pulsar-underreplication-notification"));
 
     private static class PulsarUnderreplicatedLedger extends UnderreplicatedLedger {
         PulsarUnderreplicatedLedger(long ledgerId) {
@@ -242,13 +250,15 @@ public class PulsarLedgerUnderreplicationManager implements LedgerUnderreplicati
                         callbackList = new ArrayList<>(lostBookieRecoveryDelayCallbacks);
                         lostBookieRecoveryDelayCallbacks.clear();
                     }
-                    for (BookkeeperInternalCallbacks.GenericCallback<Void> callback : callbackList) {
-                        try {
-                            callback.operationComplete(0, null);
-                        } catch (Exception e) {
-                            log.warn("lostBookieRecoveryDelayCallbacks handle error", e);
+                    notificationCallbackExecutor.execute(() -> {
+                        for (BookkeeperInternalCallbacks.GenericCallback<Void> callback : callbackList) {
+                            try {
+                                callback.operationComplete(0, null);
+                            } catch (Exception e) {
+                                log.warn("lostBookieRecoveryDelayCallbacks handle error", e);
+                            }
                         }
-                    }
+                    });
                     return;
                 }
                 if (replicationDisablePath.equals(n.getPath()) && n.getType() == NotificationType.Deleted) {
@@ -259,13 +269,15 @@ public class PulsarLedgerUnderreplicationManager implements LedgerUnderreplicati
                         callbackList = new ArrayList<>(replicationEnabledCallbacks);
                         replicationEnabledCallbacks.clear();
                     }
-                    for (BookkeeperInternalCallbacks.GenericCallback<Void> callback : callbackList) {
-                        try {
-                            callback.operationComplete(0, null);
-                        } catch (Exception e) {
-                            log.warn("replicationEnabledCallbacks handle error", e);
+                    notificationCallbackExecutor.execute(() -> {
+                        for (BookkeeperInternalCallbacks.GenericCallback<Void> callback : callbackList) {
+                            try {
+                                callback.operationComplete(0, null);
+                            } catch (Exception e) {
+                                log.warn("replicationEnabledCallbacks handle error", e);
+                            }
                         }
-                    }
+                    });
                 }
             }
         }
@@ -682,6 +694,7 @@ public class PulsarLedgerUnderreplicationManager implements LedgerUnderreplicati
         if (log.isDebugEnabled()) {
             log.debug("close()");
         }
+        notificationCallbackExecutor.shutdownNow();
         try {
             for (Map.Entry<Long, Lock> e : heldLocks.entrySet()) {
                 store.delete(e.getValue().getLockPath(), Optional.empty())
