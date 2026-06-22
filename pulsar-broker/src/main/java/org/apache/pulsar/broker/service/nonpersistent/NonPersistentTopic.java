@@ -336,37 +336,47 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
             Consumer consumer = new Consumer(subscription, subType, topic, consumerId, priorityLevel, consumerName,
                     false, cnx, cnx.getAuthRole(), metadata, readCompacted, keySharedMeta, MessageId.latest,
                     DEFAULT_CONSUMER_EPOCH, schemaType);
-            if (isMigrated()) {
-                getMigratedClusterUrlAsync().thenAccept(consumer::topicMigrated);
-            }
-
-            addConsumerToSubscription(subscription, consumer).thenRun(() -> {
-                if (!cnx.isActive()) {
-                    try {
-                        consumer.close();
-                    } catch (BrokerServiceException e) {
-                        if (e instanceof ConsumerBusyException) {
-                            log.warn("[{}][{}] Consumer {} {} already connected", topic, subscriptionName, consumerId,
-                                    consumerName);
-                        } else if (e instanceof SubscriptionBusyException) {
-                            log.warn("[{}][{}] {}", topic, subscriptionName, e.getMessage());
-                        }
-
-                        decrementUsageCount();
-                        future.completeExceptionally(e);
-                        return;
-                    }
-                    if (log.isDebugEnabled()) {
-                        log.debug("[{}] [{}] [{}] Subscribe failed -- count: {}", topic, subscriptionName,
-                                consumer.consumerName(), currentUsageCount());
-                    }
-                    future.completeExceptionally(
-                            new BrokerServiceException.ConnectionClosedException(
-                                    "Connection was closed while the opening the cursor "));
-                } else {
-                    log.info("[{}][{}] Created new subscription for {}", topic, subscriptionName, consumerId);
+            consumer.checkAndApplyTopicMigrationAsync().thenCompose(migrated -> {
+                if (migrated) {
+                    // The topic is migrated: checkAndApplyTopicMigrationAsync() has already sent the
+                    // TopicMigrated redirect and disconnected the consumer (which also released the usage
+                    // count taken by handleConsumerAdded above). Skip addConsumerToSubscription so the consumer
+                    // is never attached to the subscription on the old cluster. Sequencing the migration check
+                    // through thenCompose (instead of the previous fire-and-forget thenAccept that raced with
+                    // addConsumerToSubscription) is what guarantees the consumer is not added once migrated.
+                    log.info("[{}][{}] Skipped subscription on migrated topic; consumer {} was redirected",
+                            topic, subscriptionName, consumerId);
                     future.complete(consumer);
+                    return CompletableFuture.<Void>completedFuture(null);
                 }
+                return addConsumerToSubscription(subscription, consumer).thenRun(() -> {
+                    if (!cnx.isActive()) {
+                        try {
+                            consumer.close();
+                        } catch (BrokerServiceException e) {
+                            if (e instanceof ConsumerBusyException) {
+                                log.warn("[{}][{}] Consumer {} {} already connected", topic, subscriptionName,
+                                        consumerId, consumerName);
+                            } else if (e instanceof SubscriptionBusyException) {
+                                log.warn("[{}][{}] {}", topic, subscriptionName, e.getMessage());
+                            }
+
+                            decrementUsageCount();
+                            future.completeExceptionally(e);
+                            return;
+                        }
+                        if (log.isDebugEnabled()) {
+                            log.debug("[{}] [{}] [{}] Subscribe failed -- count: {}", topic, subscriptionName,
+                                    consumer.consumerName(), currentUsageCount());
+                        }
+                        future.completeExceptionally(
+                                new BrokerServiceException.ConnectionClosedException(
+                                        "Connection was closed while the opening the cursor "));
+                    } else {
+                        log.info("[{}][{}] Created new subscription for {}", topic, subscriptionName, consumerId);
+                        future.complete(consumer);
+                    }
+                });
             }).exceptionally(e -> {
                 Throwable throwable = e.getCause();
                 if (throwable instanceof ConsumerBusyException) {
