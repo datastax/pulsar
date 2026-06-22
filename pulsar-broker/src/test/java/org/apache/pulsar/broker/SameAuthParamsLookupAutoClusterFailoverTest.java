@@ -21,11 +21,11 @@ package org.apache.pulsar.broker;
 import static org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest.CA_CERT_FILE_PATH;
 import static org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest.getTlsFileForClient;
 import static org.apache.pulsar.client.impl.SameAuthParamsLookupAutoClusterFailover.PulsarServiceState;
-import io.netty.channel.EventLoopGroup;
 import java.net.ServerSocket;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.apache.pulsar.broker.service.NetworkErrorTestBase;
 import org.apache.pulsar.broker.service.OneWayReplicatorTestBase;
@@ -98,7 +98,7 @@ public class SameAuthParamsLookupAutoClusterFailoverTest extends OneWayReplicato
                 .tlsTrustCertsFilePath(CA_CERT_FILE_PATH);
         }
         final PulsarClient client = clientBuilder.build();
-        final EventLoopGroup executor = WhiteboxImpl.getInternalState(failover, "executor");
+        final ScheduledExecutorService executor = WhiteboxImpl.getInternalState(failover, "executor");
         final PulsarServiceState[] stateArray =
                 WhiteboxImpl.getInternalState(failover, "pulsarServiceStateArray");
 
@@ -159,7 +159,7 @@ public class SameAuthParamsLookupAutoClusterFailoverTest extends OneWayReplicato
      * and producer/lookup operations are kept out of the polling loop so a slow message send does
      * not consume the convergence budget.
      */
-    private static void awaitStatesAndIndex(EventLoopGroup executor, PulsarServiceState[] stateArray,
+    private static void awaitStatesAndIndex(ScheduledExecutorService executor, PulsarServiceState[] stateArray,
                                             SameAuthParamsLookupAutoClusterFailover failover,
                                             int expectedIndex,
                                             PulsarServiceState... expectedStates) {
@@ -169,7 +169,7 @@ public class SameAuthParamsLookupAutoClusterFailoverTest extends OneWayReplicato
         });
     }
 
-    private static void assertStatesEqual(EventLoopGroup executor, PulsarServiceState[] stateArray,
+    private static void assertStatesEqual(ScheduledExecutorService executor, PulsarServiceState[] stateArray,
                                           PulsarServiceState... expected) throws Exception {
         CompletableFuture<PulsarServiceState[]> snapshot = new CompletableFuture<>();
         executor.submit(() -> snapshot.complete(stateArray.clone()));
