@@ -707,7 +707,7 @@ public class PersistentDispatcherMultipleConsumers extends AbstractPersistentDis
             log.debug("[{}] Distributing {} messages to {} consumers", name, entries.size(), consumerList.size());
         }
 
-        long totalBytesSize = entries.stream().mapToLong(Entry::getLength).sum();
+        long totalBytesSize = getTotalBytesSize(entries);
         updatePendingBytesToDispatch(totalBytesSize);
 
         // dispatch messages to a separate thread, but still in order for this subscription
