@@ -18,6 +18,8 @@
  */
 package org.apache.pulsar.broker.service.persistent;
 
+import static org.apache.pulsar.broker.service.AbstractReplicator.State.Disconnected;
+import static org.apache.pulsar.broker.service.AbstractReplicator.State.Disconnecting;
 import static org.apache.pulsar.broker.service.AbstractReplicator.State.Started;
 import static org.apache.pulsar.broker.service.AbstractReplicator.State.Starting;
 import static org.apache.pulsar.broker.service.AbstractReplicator.State.Terminated;
@@ -50,6 +52,7 @@ import org.apache.bookkeeper.mledger.ManagedLedgerException;
 import org.apache.bookkeeper.mledger.ManagedLedgerException.CursorAlreadyClosedException;
 import org.apache.bookkeeper.mledger.ManagedLedgerException.TooManyRequestsException;
 import org.apache.bookkeeper.mledger.Position;
+import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.pulsar.broker.PulsarServerException;
@@ -143,13 +146,6 @@ public abstract class PersistentReplicator extends AbstractReplicator
 
     @Override
     protected void setProducerAndTriggerReadEntries(Producer<byte[]> producer) {
-        // Repeat until there are no read operations in progress
-        if (STATE_UPDATER.get(this) == State.Starting && hasPendingRead() && !cursor.cancelPendingReadRequest()) {
-            brokerService.getPulsar().getExecutor()
-                    .schedule(() -> setProducerAndTriggerReadEntries(producer), 10, TimeUnit.MILLISECONDS);
-            return;
-        }
-
         /**
          * 1. Try change state to {@link Started}.
          * 2. Atoms modify multiple properties if change state success, to avoid another thread get a null value
@@ -171,8 +167,6 @@ public abstract class PersistentReplicator extends AbstractReplicator
             // activate cursor: so, entries can be cached.
             this.cursor.setActive();
 
-            // Rewind the cursor to be sure to read again all non-acked messages sent while restarting
-            cursor.rewind();
             // read entries
             readMoreEntries();
         } else {
@@ -281,6 +275,30 @@ public abstract class PersistentReplicator extends AbstractReplicator
         return new AvailablePermits((int) availablePermitsOnMsg, availablePermitsOnByte);
     }
 
+    public void disconnectIfNoTrafficAndBacklog() {
+        // Disabled the feature.
+        int threshold = brokerService.getPulsar().getConfig().getBrokerReplicationInactiveThresholdSeconds();
+        if (threshold <= 0) {
+            return;
+        }
+        // Has backlog.
+        long backlog = getNumberOfEntriesInBacklog();
+        if (backlog > 0) {
+            return;
+        }
+        // Already disconnected.
+        if (state != Started) {
+            return;
+        }
+
+        // Disconnect if no backlog and no traffic for a long time.
+        if (System.currentTimeMillis() - latestPublishTime > threshold * 1000L) {
+            log.info("Disconnecting replication producers since no producer is active for a long time."
+                    + " brokerReplicationInactiveThresholdSeconds: {}", threshold);
+            disconnect();
+        }
+    }
+
     protected void readMoreEntries() {
         if (state.equals(Terminated) || state.equals(Terminating)) {
             return;
@@ -346,6 +364,48 @@ public abstract class PersistentReplicator extends AbstractReplicator
             log.debug("[{}] Read entries complete of {} messages", replicatorId, entries.size());
         }
         InFlightTask inFlightTask = (InFlightTask) ctx;
+
+        latestPublishTime = System.currentTimeMillis();
+        // Release memory if terminated.
+        if (state == State.Terminated || state == State.Terminating
+                || inFlightTask.isSkipReadResultDueToCursorRewind()) {
+            for (Entry entry : entries) {
+                inFlightTask.incCompletedEntries();
+                entry.release();
+            }
+            return;
+        }
+
+        // Retry to trigger read completes if it is not started.
+        ManagedLedgerImpl ml = (ManagedLedgerImpl) cursor.getManagedLedger();
+        Runnable retryReplicateEntries = () -> {
+            long estimatedTimeStampProducerConnected = this.estimatedTimeStampProducerConnected;
+            long delayMillis;
+            if (estimatedTimeStampProducerConnected > System.currentTimeMillis()) {
+                delayMillis = (estimatedTimeStampProducerConnected - System.currentTimeMillis()) + 100;
+            } else {
+                delayMillis = 100;
+            }
+            ml.getScheduledExecutor().schedule(() -> {
+                ml.getExecutor().execute(() -> {
+                    readEntriesComplete(entries, ctx);
+                });
+            }, delayMillis, TimeUnit.MILLISECONDS);
+        };
+
+        // Retry.
+        if (state == Disconnecting ||  state == Starting) {
+            retryReplicateEntries.run();
+            return;
+        }
+        // Start producer and retry.
+        if (state == Disconnected) {
+            startProducer();
+            retryReplicateEntries.run();
+            return;
+        }
+
+        // After set entries, the next reading can be start.
         inFlightTask.setEntries(entries);
 
         // After the replicator starts, the speed will be gradually increased.
@@ -927,13 +987,8 @@ public abstract class PersistentReplicator extends AbstractReplicator
                             .TopicBusyException("Cannot close a replicator with backlog"));
                 }
             }
-            beforeTerminateOrCursorRewinding(ReasonOfWaitForCursorRewinding.Disconnecting);
             return CompletableFuture.completedFuture(null);
         }
-    }
-
-    protected void afterDisconnected() {
-        doRewindCursor(false);
     }
 
     protected void beforeTerminateOrCursorRewinding(ReasonOfWaitForCursorRewinding reason) {

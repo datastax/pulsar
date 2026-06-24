@@ -145,16 +145,12 @@ public class ReplicatedSubscriptionsController implements AutoCloseable, Topic.P
     }
 
     private void receivedSnapshotRequest(ReplicatedSubscriptionsSnapshotRequest request) {
-        // if replicator producer is already closed, restart it to send snapshot response
         Replicator replicator = topic.getReplicators().get(request.getSourceCluster());
         if (replicator == null) {
             log.warn("[{}] Received replicated subscription snapshot request {} from cluster {}, but no replicator is"
                             + " configured for that cluster. Ignoring the request.",
                     topic.getName(), request.getSnapshotId(), request.getSourceCluster());
             return;
-        }
-        if (!replicator.isConnected()) {
-            topic.startReplProducers();
         }
 
         // Send response containing the current last written message id. The response
