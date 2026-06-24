@@ -83,6 +83,11 @@ public abstract class AbstractReplicator implements Replicator {
     private static final AtomicReferenceFieldUpdater<AbstractReplicator, Attributes> ATTRIBUTES_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(AbstractReplicator.class, Attributes.class, "attributes");
 
+    protected volatile long latestPublishTime = System.currentTimeMillis();
+
+    // The estimated time when the producer connection is successful, "0" means it will be connected immediately.
+    protected volatile long estimatedTimeStampProducerConnected = 0;
+
     public enum State {
         /**
          * This enum has two mean meanings：
@@ -164,7 +169,7 @@ public abstract class AbstractReplicator implements Replicator {
         return CompletableFuture.completedFuture(null);
     }
 
-    public void startProducer() {
+    protected void startProducer() {
         // Guarantee only one task call "producerBuilder.createAsync()".
         Pair<Boolean, State> setStartingRes = compareSetAndGetState(State.Disconnected, State.Starting);
         if (!setStartingRes.getLeft()) {
@@ -197,12 +202,14 @@ public abstract class AbstractReplicator implements Replicator {
             ProducerBuilderImpl builderImpl = (ProducerBuilderImpl) producerBuilder;
             builderImpl.getConf().setNonPartitionedTopicExpected(true);
             return producerBuilder.createAsync().thenAccept(producer -> {
+                estimatedTimeStampProducerConnected = 0;
                 setProducerAndTriggerReadEntries(producer);
             });
         }).exceptionally(ex -> {
             Pair<Boolean, State> setDisconnectedRes = compareSetAndGetState(State.Starting, State.Disconnected);
             if (setDisconnectedRes.getLeft()) {
                 long waitTimeMs = backOff.next();
+                estimatedTimeStampProducerConnected = System.currentTimeMillis() + waitTimeMs;
                 log.warn("[{}] Failed to create remote producer ({}), retrying in {} s",
                         replicatorId, ex.getMessage(), waitTimeMs / 1000.0);
                 // BackOff before retrying
@@ -305,8 +312,7 @@ public abstract class AbstractReplicator implements Replicator {
     /**
      * This method only be used by {@link PersistentTopic#checkGC} now.
      */
-    @Override
-    public CompletableFuture<Void> disconnect() {
+    protected CompletableFuture<Void> disconnect() {
         long backlog = getNumberOfEntriesInBacklog();
         if (backlog > 0) {
             CompletableFuture<Void> disconnectFuture = new CompletableFuture<>();
@@ -384,8 +390,6 @@ public abstract class AbstractReplicator implements Replicator {
             Pair<Boolean, State> setDisconnectedRes = compareSetAndGetState(State.Disconnecting, State.Disconnected);
             if (setDisconnectedRes.getLeft()) {
                 this.producer = null;
-                // deactivate further read
-                disableReplicatorRead();
                 return;
             }
             if (setDisconnectedRes.getRight() == State.Terminating

@@ -60,8 +60,7 @@ public class ShadowReplicator extends PersistentReplicator {
         try {
             // This flag is set to true when we skip at least one local message,
             // in order to skip remaining local messages.
-            boolean isLocalMessageSkippedOnce = false;
-            boolean skipRemainingMessages = inFlightTask.isSkipReadResultDueToCursorRewind();
+            boolean skipRemainingMessages = false;
             for (int i = 0; i < entries.size(); i++) {
                 Entry entry = entries.get(i);
                 // Skip the messages since the replicator need to fetch the schema info to replicate the schema to the
@@ -98,14 +97,14 @@ public class ShadowReplicator extends PersistentReplicator {
                     continue;
                 }
 
-                if (STATE_UPDATER.get(this) != State.Started || isLocalMessageSkippedOnce) {
+                if (STATE_UPDATER.get(this) != State.Started || inFlightTask.isSkipReadResultDueToCursorRewind()) {
                     // The producer is not ready yet after having stopped/restarted. Drop the message because it will
                     // recovered when the producer is ready
                     if (log.isDebugEnabled()) {
                         log.debug("[{}] Dropping read message at {} because producer is not ready",
                                 replicatorId, entry.getPosition());
                     }
-                    isLocalMessageSkippedOnce = true;
+                    skipRemainingMessages = true;
                     inFlightTask.incCompletedEntries();
                     entry.release();
                     msg.recycle();

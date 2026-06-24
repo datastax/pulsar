@@ -29,7 +29,6 @@ import static org.apache.pulsar.compaction.Compactor.COMPACTION_SUBSCRIPTION;
 import com.carrotsearch.hppc.ObjectObjectHashMap;
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Sets;
 import io.netty.buffer.ByteBuf;
 import io.netty.util.concurrent.FastThreadLocal;
 import java.io.IOException;
@@ -830,9 +829,7 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
             CompletableFuture<Void> producerQueuedFuture) {
         return super.addProducer(producer, producerQueuedFuture).thenCompose(topicEpoch -> {
             messageDeduplication.producerAdded(producer.getProducerName());
-
-            // Start replication producers if not already
-            return startReplProducers().thenApply(__ -> topicEpoch);
+            return CompletableFuture.completedFuture(topicEpoch);
         });
     }
 
@@ -877,46 +874,6 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
             }
         }
         return false;
-    }
-
-    public CompletableFuture<Void> startReplProducers() {
-        // read repl-cluster from policies to avoid restart of replicator which are in process of disconnect and close
-        return brokerService.pulsar().getPulsarResources().getNamespaceResources()
-                .getPoliciesAsync(TopicName.get(topic).getNamespaceObject())
-                .thenAcceptAsync(optPolicies -> {
-                    if (optPolicies.isPresent()) {
-                        if (optPolicies.get().replication_clusters != null) {
-                            Set<String> configuredClusters = Sets.newTreeSet(optPolicies.get().replication_clusters);
-                            replicators.forEach((region, replicator) -> {
-                                if (configuredClusters.contains(region)) {
-                                    replicator.startProducer();
-                                }
-                            });
-                        }
-                    } else {
-                        replicators.forEach((region, replicator) -> replicator.startProducer());
-                    }
-                }, getOrderedExecutor()).exceptionally(ex -> {
-            if (log.isDebugEnabled()) {
-                log.debug("[{}] Error getting policies while starting repl-producers {}", topic, ex.getMessage());
-            }
-            replicators.forEach((region, replicator) -> replicator.startProducer());
-            return null;
-        });
-    }
-
-    public CompletableFuture<Void> stopReplProducers() {
-        List<CompletableFuture<Void>> closeFutures = new ArrayList<>();
-        replicators.forEach((region, replicator) -> closeFutures.add(replicator.terminate()));
-        shadowReplicators.forEach((__, replicator) -> closeFutures.add(replicator.terminate()));
-        return FutureUtil.waitForAll(closeFutures);
-    }
-
-    private synchronized CompletableFuture<Void> closeReplProducersIfNoBacklog() {
-        List<CompletableFuture<Void>> closeFutures = new ArrayList<>();
-        replicators.forEach((region, replicator) -> closeFutures.add(replicator.disconnect()));
-        shadowReplicators.forEach((__, replicator) -> closeFutures.add(replicator.disconnect()));
-        return FutureUtil.waitForAll(closeFutures);
     }
 
     @Override
@@ -3251,9 +3208,9 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
         }
         if (TopicName.get(topic).isGlobal()) {
             // no local producers
-            return hasLocalProducers();
+            return hasProducersActive() || hasActiveReplicators();
         } else {
-            return currentUsageCount() != 0;
+            return currentUsageCount() != 0 || hasActiveReplicators();
         }
     }
 
@@ -3460,51 +3417,8 @@ public class PersistentTopic extends AbstractTopic implements Topic, AddEntryCal
             // Topic activity is still within the retention period
             return;
         } else {
-            CompletableFuture<Void> replCloseFuture = new CompletableFuture<>();
-
-            if (TopicName.get(topic).isGlobal()) {
-                // For global namespace, close repl producers first.
-                // Once all repl producers are closed, we can delete the topic,
-                // provided no remote producers connected to the broker.
-                if (log.isDebugEnabled()) {
-                    log.debug("[{}] Global topic inactive for {} seconds, closing repl producers.", topic,
-                        maxInactiveDurationInSec);
-                }
-                /**
-                 * There is a race condition that may cause a NPE:
-                 * - task 1: a callback of "replicator.cursor.asyncRead" will trigger a replication.
-                 * - task 2: "closeReplProducersIfNoBacklog" called by current thread will make the variable
-                 *   "replicator.producer" to a null value.
-                 * Race condition: task 1 will get a NPE when it tries to send messages using the variable
-                 * "replicator.producer", because task 2 will set this variable to "null".
-                 * TODO Create a seperated PR to fix it.
-                 */
-                closeReplProducersIfNoBacklog().thenRun(() -> {
-                    if (hasRemoteProducers()) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("[{}] Global topic has connected remote producers. Not a candidate for GC",
-                                    topic);
-                        }
-                        replCloseFuture
-                                .completeExceptionally(new TopicBusyException("Topic has connected remote producers"));
-                    } else {
-                        log.info("[{}] Global topic inactive for {} seconds, closed repl producers", topic,
-                            maxInactiveDurationInSec);
-                        replCloseFuture.complete(null);
-                    }
-                }).exceptionally(e -> {
-                    if (log.isDebugEnabled()) {
-                        log.debug("[{}] Global topic has replication backlog. Not a candidate for GC", topic);
-                    }
-                    replCloseFuture.completeExceptionally(e.getCause());
-                    return null;
-                });
-            } else {
-                replCloseFuture.complete(null);
-            }
-
-            replCloseFuture.thenCompose(v -> delete(deleteMode == InactiveTopicDeleteMode.delete_when_no_subscriptions,
-                deleteMode == InactiveTopicDeleteMode.delete_when_subscriptions_caught_up, false))
+            delete(deleteMode == InactiveTopicDeleteMode.delete_when_no_subscriptions,
+                deleteMode == InactiveTopicDeleteMode.delete_when_subscriptions_caught_up, false)
                     .thenCompose((res) -> tryToDeletePartitionedMetadata())
                     .thenRun(() -> log.info("[{}] Topic deleted successfully due to inactivity", topic))
                     .exceptionally(e -> {
