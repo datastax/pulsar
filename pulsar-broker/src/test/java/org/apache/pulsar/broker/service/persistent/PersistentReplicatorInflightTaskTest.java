@@ -46,9 +46,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import lombok.Cleanup;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
@@ -162,6 +165,10 @@ public class PersistentReplicatorInflightTaskTest extends OneWayReplicatorTestBa
             PersistentTopic topic = (PersistentTopic) pulsar1.getBrokerService().getTopic(topicName, false)
                     .join().get();
             ManagedLedgerImpl ml = (ManagedLedgerImpl) topic.getManagedLedger();
+            // errorOrNot blocks on failRead, so run it on a dedicated single-threaded executor instead of the
+            // calling read thread; otherwise the blocked read thread would stall replicator.terminate().
+            @Cleanup("shutdownNow")
+            ExecutorService readFailExecutor = Executors.newSingleThreadExecutor();
             ManagedLedgerTest.makeReadEntryProbFail(ml, () -> {
                 readStarted.countDown();
                 try {
@@ -173,7 +180,7 @@ public class PersistentReplicatorInflightTaskTest extends OneWayReplicatorTestBa
                     return new ManagedLedgerException(e);
                 }
                 return new ManagedLedgerException.TooManyRequestsException("mocked read failure");
-            });
+            }, readFailExecutor);
 
             pulsar1.getConfig().setReplicationStartAt("earliest");
             admin1.topics().setReplicationClusters(topicName, Arrays.asList(cluster1, cluster2));
@@ -324,6 +331,10 @@ public class PersistentReplicatorInflightTaskTest extends OneWayReplicatorTestBa
             ManagedLedgerImpl ml = (ManagedLedgerImpl) topic.getManagedLedger();
             // Clear the entry cache and intercept ledger reads: block the first read so it stays in flight
             // (the in-flight task keeps entries == null), then let it and all later reads succeed.
+            // errorOrNot blocks the first read on releaseRead, so run it on a dedicated single-threaded executor
+            // instead of the calling read thread.
+            @Cleanup("shutdownNow")
+            ExecutorService readFailExecutor = Executors.newSingleThreadExecutor();
             ManagedLedgerTest.makeReadEntryProbFail(ml, () -> {
                 if (blockNextRead.compareAndSet(true, false)) {
                     readBlocked.countDown();
@@ -335,7 +346,7 @@ public class PersistentReplicatorInflightTaskTest extends OneWayReplicatorTestBa
                 }
                 // Never fail the read; it must complete successfully to reach the skip branch.
                 return null;
-            });
+            }, readFailExecutor);
 
             // Start replication from earliest; the first read blocks inside the ledger read (in flight).
             pulsar1.getConfig().setReplicationStartAt("earliest");
@@ -467,6 +478,10 @@ public class PersistentReplicatorInflightTaskTest extends OneWayReplicatorTestBa
             ManagedLedgerImpl ml = (ManagedLedgerImpl) topic.getManagedLedger();
             // Clear the entry cache and intercept ledger reads: block the first read so it stays in flight
             // (the in-flight task keeps entries == null), then let it and all later reads succeed.
+            // errorOrNot blocks the first read on releaseRead, so run it on a dedicated single-threaded executor
+            // instead of the calling read thread.
+            @Cleanup("shutdownNow")
+            ExecutorService readFailExecutor = Executors.newSingleThreadExecutor();
             ManagedLedgerTest.makeReadEntryProbFail(ml, () -> {
                 if (blockNextRead.compareAndSet(true, false)) {
                     readBlocked.countDown();
@@ -478,7 +493,7 @@ public class PersistentReplicatorInflightTaskTest extends OneWayReplicatorTestBa
                 }
                 // Never fail the read; it must complete successfully to reach the skip branch.
                 return null;
-            });
+            }, readFailExecutor);
 
             // Start replication from earliest; the first read blocks inside the ledger read (in flight).
             pulsar1.getConfig().setReplicationStartAt("earliest");
