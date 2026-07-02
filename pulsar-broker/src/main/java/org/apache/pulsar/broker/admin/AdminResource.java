@@ -748,6 +748,20 @@ public abstract class AdminResource extends PulsarWebResource {
      * @param topicName given topic name
      */
     protected CompletableFuture<Boolean> checkTopicExistsAsync(TopicName topicName) {
+        if (!topicName.isPersistent()) {
+            // For non-persistent topics, resolve existence via NamespaceService#checkTopicExistsAsync, which
+            // consults the owner broker's in-memory topic map. The list-based path below (getListOfTopics ->
+            // getListOfNonPersistentTopics) only reports "active" non-persistent topics -- those with producers,
+            // consumers or subscriptions -- so an idle non-persistent topic (e.g. just created) would be treated
+            // as non-existent, making its topic-policy admin operations fail with 404 NOT_FOUND.
+            // branch-4.0-only workaround; branch-4.1+ fix this via apache/pulsar#24225, not backported to branch-4.0.
+            return pulsar().getNamespaceService().checkTopicExistsAsync(topicName).thenApply(topicExistsInfo -> {
+                boolean exists = topicExistsInfo.isExists();
+                topicExistsInfo.recycle();
+                return exists;
+            });
+        }
+
         return pulsar().getNamespaceService().getListOfTopics(topicName.getNamespaceObject(),
                 CommandGetTopicsOfNamespace.Mode.ALL)
                 .thenCompose(topics -> {
