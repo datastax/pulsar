@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -47,6 +48,7 @@ import java.util.concurrent.TimeoutException;
 import lombok.Cleanup;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest;
 import org.apache.pulsar.broker.systopic.SystemTopicClient;
 import org.apache.pulsar.client.admin.PulsarAdminException;
@@ -55,11 +57,13 @@ import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.common.events.PulsarEvent;
 import org.apache.pulsar.common.naming.NamespaceName;
+import org.apache.pulsar.common.naming.SystemTopicNames;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.TenantInfoImpl;
 import org.apache.pulsar.common.policies.data.TopicPolicies;
 import org.apache.pulsar.utils.TestLogAppender;
+import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.mockito.Mockito;
 import org.testng.Assert;
@@ -841,5 +845,65 @@ public class SystemTopicBasedTopicPoliciesServiceTest extends MockedPulsarServic
                 spyService.getReaderCaches().get(namespace));
         assertSame(reloadInitFuture, spyService.getPoliciesCacheInit(namespace));
         Mockito.verify(reloadReader, Mockito.never()).closeAsync();
+    }
+
+    @Test
+    public void testReplayTopicPolicyListenersNotifiesOnlyNamespaceScopedLocalAndGlobalPolicies() throws Exception {
+        SystemTopicBasedTopicPoliciesService service =
+                (SystemTopicBasedTopicPoliciesService) pulsar.getTopicPoliciesService();
+        final NamespaceName namespaceA = NamespaceName.get(NAMESPACE1);
+        final NamespaceName namespaceB = NamespaceName.get(NAMESPACE2);
+        final TopicName localTopicA = TopicName.get("persistent", namespaceA, "replay-local-a");
+        final TopicName globalTopicA = TopicName.get("persistent", namespaceA, "replay-global-a");
+        final TopicName topicB = TopicName.get("persistent", namespaceB, "replay-b");
+
+        // Seed the caches: namespace A has one topic with a cached local policy and another with a cached global
+        // policy; namespace B has a topic with a cached local policy that must not be replayed for namespace A.
+        service.policiesCache.put(localTopicA, TopicPolicies.builder().isGlobal(false).build());
+        service.globalPoliciesCache.put(globalTopicA, TopicPolicies.builder().isGlobal(true).build());
+        service.policiesCache.put(topicB, TopicPolicies.builder().isGlobal(false).build());
+
+        final Map<TopicName, List<TopicPolicies>> received = new ConcurrentHashMap<>();
+        for (TopicName topicName : List.of(localTopicA, globalTopicA, topicB)) {
+            final List<TopicPolicies> updates = new CopyOnWriteArrayList<>();
+            received.put(topicName, updates);
+            service.registerListenerAsync(topicName, updates::add).get();
+        }
+
+        service.replayTopicPolicyListeners(namespaceA).get(30, TimeUnit.SECONDS);
+
+        // Only namespace A's topics are notified, once each, and both the local and the global cache are replayed.
+        Assertions.assertThat(received.get(localTopicA)).hasSize(1);
+        Assertions.assertThat(received.get(globalTopicA)).hasSize(1);
+        // Namespace B is left untouched. The pre-fix code iterated the whole cache and replayed every namespace.
+        Assertions.assertThat(received.get(topicB)).isEmpty();
+    }
+
+    @Test
+    public void testTopicPolicyListenerReplayDisabledByDefault() {
+        Assertions.assertThat(new ServiceConfiguration().isTopicPolicyListenerReplayEnabled()).isFalse();
+    }
+
+    @Test
+    public void testChangeEventsTopicPolicyLoadDoesNotRecurse() throws Exception {
+        SystemTopicBasedTopicPoliciesService service =
+                (SystemTopicBasedTopicPoliciesService) pulsar.getTopicPoliciesService();
+        final String namespaceStr = "system-topic/change-events-recursion";
+        admin.namespaces().createNamespace(namespaceStr);
+        final NamespaceName namespace = NamespaceName.get(namespaceStr);
+        final TopicName changeEvents =
+                TopicName.get("persistent", namespace, SystemTopicNames.NAMESPACE_EVENTS_LOCAL_NAME);
+
+        // The __change_events system topic must not load topic-level policies: that would create a policy-cache
+        // reader on __change_events while __change_events is still loading -- a recursive, deadlocking dependency.
+        // isSelf() guards getTopicPoliciesAsync so it returns empty for the __change_events topic without ever
+        // creating a reader. AbstractTopic#initTopicPolicy (now called for persistent AND non-persistent topics)
+        // relies on this short-circuit when a __change_events topic itself is loaded.
+        Assertions.assertThat(service.getTopicPoliciesAsync(changeEvents, TopicPoliciesService.GetType.LOCAL_ONLY)
+                .get(30, TimeUnit.SECONDS)).isEmpty();
+        Assertions.assertThat(service.getTopicPoliciesAsync(changeEvents, TopicPoliciesService.GetType.GLOBAL_ONLY)
+                .get(30, TimeUnit.SECONDS)).isEmpty();
+        // No policy-cache reader was created as a side effect, which is what would recurse.
+        Assertions.assertThat(service.getReaderCaches()).doesNotContainKey(namespace);
     }
 }
