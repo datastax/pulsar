@@ -66,7 +66,6 @@ import org.apache.pulsar.broker.service.SubscriptionOption;
 import org.apache.pulsar.broker.service.Topic;
 import org.apache.pulsar.broker.service.TopicAttributes;
 import org.apache.pulsar.broker.service.TopicPolicyListener;
-import org.apache.pulsar.broker.service.TopicPolicyListenerWrapper;
 import org.apache.pulsar.broker.service.TransportCnx;
 import org.apache.pulsar.broker.service.schema.exceptions.IncompatibleSchemaException;
 import org.apache.pulsar.broker.service.schema.exceptions.NotExistSchemaException;
@@ -127,9 +126,6 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
             TOPIC_ATTRIBUTES_FIELD_UPDATER = AtomicReferenceFieldUpdater.newUpdater(
                     NonPersistentTopic.class, TopicAttributes.class, "topicAttributes");
 
-    // prevents race conditions in topic policy initialization
-    private final TopicPolicyListenerWrapper topicPolicyListener = new TopicPolicyListenerWrapper(this);
-
     private static class TopicStats {
         public double averageMsgSize;
         public double aggMsgRateIn;
@@ -156,7 +152,6 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
     public NonPersistentTopic(String topic, BrokerService brokerService) {
         super(topic, brokerService);
         this.isFenced = false;
-        registerTopicPolicyListener();
     }
 
     private CompletableFuture<Void> updateClusterMigrated() {
@@ -183,13 +178,15 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                     updateResourceGroupLimiter(policies);
                     return updateClusterMigrated();
                 }, getPoliciesNotifyThread())
-                // Complete the topic-policy listener wrapper so buffered and future topic-level policy
-                // updates are forwarded to this topic. Without this the wrapper stays uninitialized forever
-                // and all topic-level policy updates are silently dropped. Unlike PersistentTopic,
-                // non-persistent topics don't load initial topic policies (matching the previous behavior),
-                // so the loaded values are passed as null.
-                .thenRunAsync(() -> topicPolicyListener.completeInitialization(null, null),
-                        getPoliciesNotifyThread());
+                // Load the topic's initial policies (global and local) and register the policy listener, so a
+                // non-persistent topic applies its own policies on load, the same as a persistent topic does.
+                .thenCompose(ignore -> initTopicPolicy())
+                // a failure to load the initial topic policies must not fail topic loading.
+                .exceptionally(ex -> {
+                    log.warn("[{}] Error loading topic policies during initialization. Ignoring the failure.",
+                            topic, ex);
+                    return null;
+                });
     }
 
     @Override
@@ -1319,8 +1316,4 @@ public class NonPersistentTopic extends AbstractTopic implements Topic, TopicPol
                 old -> old != null ? old : new TopicAttributes(TopicName.get(topic)));
     }
 
-    @Override
-    public TopicPolicyListener getTopicPolicyListener() {
-        return topicPolicyListener;
-    }
 }

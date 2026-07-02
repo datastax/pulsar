@@ -864,16 +864,41 @@ public class SystemTopicBasedTopicPoliciesService implements TopicPoliciesServic
                     log.debug("[{}] Reach the end of the system topic.", reader.getSystemTopic().getTopicName());
                 }
 
-                // replay policy message
-                List<CompletableFuture<Void>> notifyFutures = new ArrayList<>();
-                for (Map.Entry<TopicName, TopicPolicies> entry : policiesCache.entrySet()) {
-                    TopicName topicName = entry.getKey();
-                    TopicPolicies policies = entry.getValue();
-                    notifyFutures.add(notifyListenersForTopicAsync(topicName, policies));
+                // Optionally re-notify the topic-policy listeners for this namespace with the cached policies.
+                // Topics load their own policies on load (AbstractTopic#initTopicPolicy), so this replay is only
+                // needed for custom plugins that register TopicPolicyListeners and rely on the broadcast; it is
+                // off by default (topicPolicyListenerReplayEnabled).
+                if (pulsarService.getConfiguration().isTopicPolicyListenerReplayEnabled()) {
+                    NamespaceName namespaceObject = reader.getSystemTopic().getTopicName().getNamespaceObject();
+                    FutureUtil.completeAfter(future, replayTopicPolicyListeners(namespaceObject));
+                } else {
+                    future.complete(null);
                 }
-                FutureUtil.completeAfter(future, FutureUtil.waitForAll(notifyFutures));
             }
         });
+    }
+
+    /**
+     * Re-notifies the registered topic-policy listeners for every topic in {@code namespace} with the currently
+     * cached policies (both local and global). Topics apply their own policies on load, so this is only needed for
+     * custom plugins that register {@link TopicPolicyListener}s and rely on the broadcast when a namespace's policy
+     * cache finishes loading (see {@code topicPolicyListenerReplayEnabled}).
+     */
+    @VisibleForTesting
+    CompletableFuture<Void> replayTopicPolicyListeners(NamespaceName namespace) {
+        List<CompletableFuture<Void>> notifyFutures = new ArrayList<>();
+        addNamespacePolicyNotifications(policiesCache, namespace, notifyFutures);
+        addNamespacePolicyNotifications(globalPoliciesCache, namespace, notifyFutures);
+        return FutureUtil.waitForAll(notifyFutures);
+    }
+
+    private void addNamespacePolicyNotifications(Map<TopicName, TopicPolicies> cache, NamespaceName namespace,
+                                                 List<CompletableFuture<Void>> notifyFutures) {
+        for (Map.Entry<TopicName, TopicPolicies> entry : cache.entrySet()) {
+            if (Objects.equals(entry.getKey().getNamespaceObject(), namespace)) {
+                notifyFutures.add(notifyListenersForTopicAsync(entry.getKey(), entry.getValue()));
+            }
+        }
     }
 
     // Full teardown of a namespace's topic-policies state: removes and closes the reader, the message-handler
