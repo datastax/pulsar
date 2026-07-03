@@ -196,6 +196,10 @@ public abstract class MockedPulsarServiceBaseTest extends TestRetrySupport {
         internalSetup();
     }
 
+    protected PulsarClient newPulsarClient() throws PulsarClientException {
+        return newPulsarClient(lookupUrl.toString(), 0);
+    }
+
     protected PulsarClient newPulsarClient(String url, int intervalInSecs) throws PulsarClientException {
         ClientBuilder clientBuilder =
                 PulsarClient.builder()
