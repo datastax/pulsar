@@ -59,6 +59,10 @@ public class UnAckedMessageRedeliveryTracker extends UnAckedMessageTracker {
         timeout = client.timer().newTimeout(new TimerTask() {
             @Override
             public void run(Timeout t) throws Exception {
+                if (t.isCancelled()) {
+                    return;
+                }
+
                 writeLock.lock();
                 try {
                     HashSet<UnackMessageIdWrapper> headPartition = redeliveryTimePartitions.removeFirst();
@@ -73,8 +77,11 @@ public class UnAckedMessageRedeliveryTracker extends UnAckedMessageTracker {
                     redeliveryTimePartitions.addLast(headPartition);
                     triggerRedelivery(consumerBase);
                 } finally {
-                    writeLock.unlock();
-                    timeout = client.timer().newTimeout(this, tickDurationInMs, TimeUnit.MILLISECONDS);
+                    try {
+                        timeout = client.timer().newTimeout(this, tickDurationInMs, TimeUnit.MILLISECONDS);
+                    } finally {
+                        writeLock.unlock();
+                    }
                 }
             }
         }, this.tickDurationInMs, TimeUnit.MILLISECONDS);
