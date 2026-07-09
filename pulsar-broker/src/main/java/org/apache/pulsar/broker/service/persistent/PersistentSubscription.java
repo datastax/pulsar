@@ -52,7 +52,6 @@ import org.apache.bookkeeper.mledger.ManagedLedgerException.ConcurrentFindCursor
 import org.apache.bookkeeper.mledger.ManagedLedgerException.InvalidCursorPositionException;
 import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.ScanOutcome;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.intercept.BrokerInterceptor;
@@ -131,7 +130,6 @@ public class PersistentSubscription extends AbstractSubscription {
     private volatile ReplicatedSubscriptionSnapshotCache replicatedSubscriptionSnapshotCache;
     @Getter
     private final PendingAckHandle pendingAckHandle;
-    private volatile Map<String, String> subscriptionProperties;
     private volatile CompletableFuture<Void> fenceFuture;
     private volatile CompletableFuture<Void> inProgressResetCursorFuture;
     private volatile Boolean replicatedControlled;
@@ -151,6 +149,14 @@ public class PersistentSubscription extends AbstractSubscription {
         this(topic, subscriptionName, cursor, replicated, Collections.emptyMap());
     }
 
+    /**
+     * Creates a persistent subscription.
+     *
+     * @deprecated use {@link #PersistentSubscription(PersistentTopic, String, ManagedCursor, Boolean)}
+     *             instead. The {@code subscriptionProperties} parameter is no longer read; the
+     *             cursor already carries all subscription properties.
+     */
+    @Deprecated
     public PersistentSubscription(PersistentTopic topic, String subscriptionName, ManagedCursor cursor,
                                   Boolean replicated, Map<String, String> subscriptionProperties) {
         this.topic = topic;
@@ -163,8 +169,6 @@ public class PersistentSubscription extends AbstractSubscription {
         if (replicated != null) {
             this.setReplicated(replicated);
         }
-        this.subscriptionProperties = MapUtils.isEmpty(subscriptionProperties)
-                ? Collections.emptyMap() : Collections.unmodifiableMap(subscriptionProperties);
         if (config.isTransactionCoordinatorEnabled()
                 && !isEventSystemTopic(TopicName.get(topicName))
                 && !ExtensibleLoadManagerImpl.isInternalTopic(topicName)) {
@@ -1428,7 +1432,7 @@ public class PersistentSubscription extends AbstractSubscription {
         subStats.msgRateExpired = expiryMonitor.getMessageExpiryRate();
         subStats.totalMsgExpired = expiryMonitor.getTotalMessageExpired();
         subStats.isReplicated = isReplicated();
-        subStats.subscriptionProperties = subscriptionProperties;
+        subStats.subscriptionProperties = getSubscriptionProperties();
         subStats.isDurable = cursor.isDurable();
         if (getType() == SubType.Key_Shared && dispatcher instanceof StickyKeyDispatcher) {
             StickyKeyDispatcher keySharedDispatcher = (StickyKeyDispatcher) dispatcher;
@@ -1562,7 +1566,7 @@ public class PersistentSubscription extends AbstractSubscription {
 
     @Override
     public Map<String, String> getSubscriptionProperties() {
-        return subscriptionProperties;
+        return cursor.getCursorProperties();
     }
 
     public Position getPositionInPendingAck(Position position) {
@@ -1576,10 +1580,7 @@ public class PersistentSubscription extends AbstractSubscription {
         } else {
             newSubscriptionProperties = Collections.unmodifiableMap(subscriptionProperties);
         }
-        return cursor.setCursorProperties(newSubscriptionProperties)
-                .thenRun(() -> {
-                    this.subscriptionProperties = newSubscriptionProperties;
-                });
+        return cursor.setCursorProperties(newSubscriptionProperties);
     }
     /**
      * Return a merged map that contains the cursor properties specified by used
