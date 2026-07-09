@@ -62,6 +62,7 @@ import org.apache.pulsar.metadata.api.MetadataStoreConfig;
 import org.apache.pulsar.metadata.api.NotificationType;
 import org.apache.pulsar.metadata.api.extended.MetadataStoreExtended;
 import org.awaitility.Awaitility;
+import org.testng.SkipException;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.Test;
 
@@ -303,6 +304,9 @@ public class LedgerUnderreplicationManagerTest extends BaseMetadataStoreTest {
     @Test(dataProvider = "distributedImpl", timeOut = 10000)
     public void testMarkReplicatedDeletesEmptyParentNodes(String provider, Supplier<String> urlSupplier)
             throws Exception {
+        if (provider.equals("Etcd")) {
+            throw new SkipException("Etcd doesn't support deleting empty parent nodes");
+        }
         methodSetup(urlSupplier);
 
         String missingReplica = "localhost:3181";
