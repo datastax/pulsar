@@ -18,6 +18,8 @@
  */
 package org.apache.pulsar.broker.service.persistent;
 
+import static org.apache.bookkeeper.mledger.ManagedCursor.CURSOR_INTERNAL_PROPERTY_PREFIX;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doCallRealMethod;
@@ -30,8 +32,10 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
@@ -45,6 +49,7 @@ import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.pulsar.broker.resources.NamespaceResources;
 import org.apache.pulsar.broker.service.Consumer;
+import org.apache.pulsar.broker.service.GetStatsOptions;
 import org.apache.pulsar.broker.testcontext.PulsarTestContext;
 import org.apache.pulsar.broker.transaction.buffer.impl.InMemTransactionBufferProvider;
 import org.apache.pulsar.broker.transaction.pendingack.PendingAckStore;
@@ -56,6 +61,7 @@ import org.apache.pulsar.common.api.proto.CommandAck.AckType;
 import org.apache.pulsar.common.api.proto.CommandSubscribe;
 import org.apache.pulsar.common.api.proto.TxnAction;
 import org.apache.pulsar.common.policies.data.Policies;
+import org.apache.pulsar.common.policies.data.stats.SubscriptionStatsImpl;
 import org.apache.pulsar.transaction.common.exception.TransactionConflictException;
 import org.awaitility.Awaitility;
 import org.testng.annotations.AfterMethod;
@@ -224,6 +230,31 @@ public class PersistentSubscriptionTest {
 
         // `acknowledgeMessage` should update cursor last active
         assertTrue(persistentSubscription.cursor.getLastActive() > beforeAcknowledgeTimestamp);
+    }
+
+    @Test
+    public void testGetSubscriptionPropertiesReflectsLiveCursorUpdates() throws Exception {
+        Map<String, String> backing = new ConcurrentHashMap<>();
+        doReturn(backing).when(cursorMock).getCursorProperties();
+        doAnswer(inv -> {
+            backing.put(inv.getArgument(0), inv.getArgument(1));
+            return CompletableFuture.completedFuture(null);
+        }).when(cursorMock).putCursorProperty(any(), any());
+        doReturn(false).when(cursorMock).isDurable();
+
+        assertThat(persistentSubscription.getSubscriptionProperties()).isEmpty();
+
+        String bucketKey = CURSOR_INTERNAL_PROPERTY_PREFIX + "delayed.bucket_100_100";
+        persistentSubscription.getCursor().putCursorProperty(bucketKey, "42").get();
+
+        Map<String, String> live = persistentSubscription.getSubscriptionProperties();
+        assertThat(live).containsEntry(bucketKey, "42");
+
+        SubscriptionStatsImpl stats = persistentSubscription
+                .getStatsAsync(new GetStatsOptions(false, false, false, false, false)).get();
+        assertThat(stats.subscriptionProperties)
+                .isSameAs(live)
+                .containsEntry(bucketKey, "42");
     }
 
     public static class CustomTransactionPendingAckStoreProvider implements TransactionPendingAckStoreProvider {
