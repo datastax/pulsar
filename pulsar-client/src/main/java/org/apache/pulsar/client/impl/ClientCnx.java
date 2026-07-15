@@ -40,7 +40,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
@@ -131,6 +133,11 @@ public class ClientCnx extends PulsarHandler {
                     .expectedItems(16)
                     .concurrencyLevel(1)
                     .build();
+    // pendingRequests stores all pending request futures but does not preserve the command type,
+    // so there is no way to distinguish lookup requests from other requests (e.g. producer/consumer creation,
+    // getTopics, getLastMessageId). This set tracks which requestIds belong to lookup requests,
+    // so that removePendingRequest can release the lookup semaphore correctly.
+    private final Set<Long> pendingLookupRequestIds = ConcurrentHashMap.newKeySet();
     // LookupRequests that waiting in client side.
     private final Queue<Pair<Long, Pair<ByteBuf, TimedCompletableFuture<LookupDataResult>>>> waitingLookupRequests;
 
@@ -340,21 +347,22 @@ public class ClientCnx extends PulsarHandler {
         ConnectException e = new ConnectException(
                 "Disconnected from server at " + ctx.channel().remoteAddress());
 
+        // Fail out all waiting lookup requests first, and clear the queue so that
+        // releasePermitAndDriveWaitingQueue won't dispatch requests on a dead connection.
+        waitingLookupRequests.forEach(pair -> pair.getRight().getRight().completeExceptionally(e));
+        waitingLookupRequests.clear();
         // Fail out all the pending ops
         pendingRequests.forEach((key, future) -> {
-            if (pendingRequests.remove(key, future) && !future.isDone()) {
+            if (removePendingRequest(key, future) && !future.isDone()) {
                 future.completeExceptionally(e);
             }
         });
-        waitingLookupRequests.forEach(pair -> pair.getRight().getRight().completeExceptionally(e));
 
         // Notify all attached producers/consumers so they have a chance to reconnect
         producers.forEach((id, producer) -> producer.connectionClosed(this, Optional.empty(), Optional.empty()));
         consumers.forEach((id, consumer) -> consumer.connectionClosed(this, Optional.empty(), Optional.empty()));
         transactionMetaStoreHandlers.forEach((id, handler) -> handler.connectionClosed(this));
         topicListWatchers.forEach((__, watcher) -> watcher.connectionClosed(this));
-
-        waitingLookupRequests.clear();
 
         producers.clear();
         consumers.clear();
@@ -516,8 +524,9 @@ public class ClientCnx extends PulsarHandler {
     protected void handleAckResponse(CommandAckResponse ackResponse) {
         checkArgument(state == State.Ready);
         checkArgument(ackResponse.getRequestId() >= 0);
-        CompletableFuture<?> completableFuture = pendingRequests.remove(ackResponse.getRequestId());
-        if (completableFuture != null && !completableFuture.isDone()) {
+        long requestId = ackResponse.getRequestId();
+        CompletableFuture<?> completableFuture = pendingRequests.get(requestId);
+        if (completableFuture != null && removePendingRequest(requestId, completableFuture)) {
             if (!ackResponse.hasError()) {
                 completableFuture.complete(null);
             } else {
@@ -567,8 +576,8 @@ public class ClientCnx extends PulsarHandler {
             log.debug("{} Received success response from server: {}", ctx.channel(), success.getRequestId());
         }
         long requestId = success.getRequestId();
-        CompletableFuture<?> requestFuture = pendingRequests.remove(requestId);
-        if (requestFuture != null) {
+        CompletableFuture<?> requestFuture = pendingRequests.get(requestId);
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             requestFuture.complete(null);
         } else {
             duplicatedResponseCounter.incrementAndGet();
@@ -586,8 +595,8 @@ public class ClientCnx extends PulsarHandler {
         }
         long requestId = success.getRequestId();
         CompletableFuture<CommandGetLastMessageIdResponse> requestFuture =
-                (CompletableFuture<CommandGetLastMessageIdResponse>) pendingRequests.remove(requestId);
-        if (requestFuture != null) {
+                (CompletableFuture<CommandGetLastMessageIdResponse>) pendingRequests.get(requestId);
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             requestFuture.complete(new CommandGetLastMessageIdResponse().copyFrom(success));
         } else {
             duplicatedResponseCounter.incrementAndGet();
@@ -618,8 +627,8 @@ public class ClientCnx extends PulsarHandler {
         }
 
         CompletableFuture<ProducerResponse> requestFuture =
-                (CompletableFuture<ProducerResponse>) pendingRequests.remove(requestId);
-        if (requestFuture != null) {
+                (CompletableFuture<ProducerResponse>) pendingRequests.get(requestId);
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             ProducerResponse pr = new ProducerResponse(success.getProducerName(),
                     success.getLastSequenceId(),
                     success.getSchemaVersion(),
@@ -640,9 +649,10 @@ public class ClientCnx extends PulsarHandler {
         }
 
         long requestId = lookupResult.getRequestId();
-        CompletableFuture<LookupDataResult> requestFuture = getAndRemovePendingLookupRequest(requestId);
+        CompletableFuture<LookupDataResult> requestFuture =
+                (CompletableFuture<LookupDataResult>) pendingRequests.get(requestId);
 
-        if (requestFuture != null) {
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             if (requestFuture.isCompletedExceptionally()) {
                 if (log.isDebugEnabled()) {
                     log.debug("{} Request {} already timed-out", ctx.channel(), lookupResult.getRequestId());
@@ -667,6 +677,7 @@ public class ClientCnx extends PulsarHandler {
                 requestFuture.complete(new LookupDataResult(lookupResult));
             }
         } else {
+            duplicatedResponseCounter.incrementAndGet();
             log.warn("{} Received unknown request id from server: {}", ctx.channel(), lookupResult.getRequestId());
         }
     }
@@ -682,9 +693,10 @@ public class ClientCnx extends PulsarHandler {
         }
 
         long requestId = lookupResult.getRequestId();
-        CompletableFuture<LookupDataResult> requestFuture = getAndRemovePendingLookupRequest(requestId);
+        CompletableFuture<LookupDataResult> requestFuture =
+                (CompletableFuture<LookupDataResult>) pendingRequests.get(requestId);
 
-        if (requestFuture != null) {
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             if (requestFuture.isCompletedExceptionally()) {
                 if (log.isDebugEnabled()) {
                     log.debug("{} Request {} already timed-out", ctx.channel(), lookupResult.getRequestId());
@@ -709,6 +721,7 @@ public class ClientCnx extends PulsarHandler {
                 requestFuture.complete(new LookupDataResult(lookupResult.getPartitions()));
             }
         } else {
+            duplicatedResponseCounter.incrementAndGet();
             log.warn("{} Received unknown request id from server: {}", ctx.channel(), lookupResult.getRequestId());
         }
     }
@@ -750,39 +763,61 @@ public class ClientCnx extends PulsarHandler {
 
     // caller of this method needs to be protected under pendingLookupRequestSemaphore
     private void addPendingLookupRequests(long requestId, TimedCompletableFuture<LookupDataResult> future) {
+        pendingLookupRequestIds.add(requestId);
         pendingRequests.put(requestId, future);
         requestTimeoutQueue.add(new RequestTime(requestId, RequestType.Lookup));
     }
 
-    private CompletableFuture<LookupDataResult> getAndRemovePendingLookupRequest(long requestId) {
-        CompletableFuture<LookupDataResult> result =
-                (CompletableFuture<LookupDataResult>) pendingRequests.remove(requestId);
-        if (result != null) {
-            Pair<Long, Pair<ByteBuf, TimedCompletableFuture<LookupDataResult>>> firstOneWaiting =
-                    waitingLookupRequests.poll();
-            if (firstOneWaiting != null) {
-                maxLookupRequestSemaphore.release();
-                // schedule a new lookup in.
-                eventLoopGroup.execute(() -> {
-                    long newId = firstOneWaiting.getLeft();
-                    TimedCompletableFuture<LookupDataResult> newFuture = firstOneWaiting.getRight().getRight();
-                    addPendingLookupRequests(newId, newFuture);
-                    ctx.writeAndFlush(firstOneWaiting.getRight().getLeft()).addListener(writeFuture -> {
-                        if (!writeFuture.isSuccess()) {
-                            log.warn("{} Failed to send request {} to broker: {}", ctx.channel(), newId,
+    /**
+     * Release the lookup semaphore permit and drive the waiting queue.
+     * This is the single centralized primitive for permit release/transfer.
+     */
+    private void releasePermitAndDriveWaitingQueue() {
+        Pair<Long, Pair<ByteBuf, TimedCompletableFuture<LookupDataResult>>> firstOneWaiting =
+                waitingLookupRequests.poll();
+        if (firstOneWaiting != null) {
+            maxLookupRequestSemaphore.release();
+            // schedule a new lookup in.
+            eventLoopGroup.execute(() -> {
+                long newId = firstOneWaiting.getLeft();
+                TimedCompletableFuture<LookupDataResult> newFuture = firstOneWaiting.getRight().getRight();
+                addPendingLookupRequests(newId, newFuture);
+                ctx.writeAndFlush(firstOneWaiting.getRight().getLeft()).addListener(writeFuture -> {
+                    if (!writeFuture.isSuccess()) {
+                        log.warn("{} Failed to send request {} to broker: {}", ctx.channel(), newId,
                                 writeFuture.cause().getMessage());
-                            getAndRemovePendingLookupRequest(newId);
+                        if (removePendingRequest(newId, newFuture)) {
                             newFuture.completeExceptionally(writeFuture.cause());
                         }
-                    });
+                    }
                 });
-            } else {
-                pendingLookupRequestSemaphore.release();
-            }
+            });
         } else {
-            duplicatedResponseCounter.incrementAndGet();
+            pendingLookupRequestSemaphore.release();
         }
-        return result;
+    }
+
+    /**
+     * Unified cleanup primitive for all pending requests.
+     * Uses pendingRequests.remove(requestId, expectedFuture) as the single CAS contention point.
+     * Only the thread that successfully removes the entry from pendingRequests owns the cleanup
+     * responsibility (including permit release for lookup requests).
+     *
+     * @param requestId the request ID to remove
+     * @param expectedFuture the expected future value for CAS comparison
+     * @return true if this call successfully obtained ownership and performed cleanup
+     */
+    private boolean removePendingRequest(long requestId, CompletableFuture<?> expectedFuture) {
+        // CAS: only one thread can successfully remove from pendingRequests
+        if (!pendingRequests.remove(requestId, expectedFuture)) {
+            return false;
+        }
+        // Won the CAS. If it's a lookup request, release the permit and drive waiting queue.
+        if (pendingLookupRequestIds.contains(requestId)) {
+            releasePermitAndDriveWaitingQueue();
+            pendingLookupRequestIds.remove(requestId);
+        }
+        return true;
     }
 
     @Override
@@ -834,8 +869,8 @@ public class ClientCnx extends PulsarHandler {
             log.error("Get not allowed error, {}", error.getMessage());
             connectionFuture.completeExceptionally(new PulsarClientException.NotAllowedException(error.getMessage()));
         }
-        CompletableFuture<?> requestFuture = pendingRequests.remove(requestId);
-        if (requestFuture != null) {
+        CompletableFuture<?> requestFuture = pendingRequests.get(requestId);
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             requestFuture.completeExceptionally(
                     getPulsarClientException(error.getError(),
                                              buildError(error.getRequestId(), error.getMessage())));
@@ -925,20 +960,14 @@ public class ClientCnx extends PulsarHandler {
         TimedCompletableFuture<LookupDataResult> future = new TimedCompletableFuture<>();
 
         if (pendingLookupRequestSemaphore.tryAcquire()) {
-            future.whenComplete((lookupDataResult, throwable) -> {
-                if (throwable instanceof ConnectException
-                        || throwable instanceof PulsarClientException.LookupException
-                        || FutureUtil.unwrapCompletionException(throwable) instanceof TimeoutException) {
-                    pendingLookupRequestSemaphore.release();
-                }
-            });
             addPendingLookupRequests(requestId, future);
             ctx.writeAndFlush(request).addListener(writeFuture -> {
                 if (!writeFuture.isSuccess()) {
                     log.warn("{} Failed to send request {} to broker: {}", ctx.channel(), requestId,
                         writeFuture.cause().getMessage());
-                    getAndRemovePendingLookupRequest(requestId);
-                    future.completeExceptionally(writeFuture.cause());
+                    if (removePendingRequest(requestId, future)) {
+                        future.completeExceptionally(writeFuture.cause());
+                    }
                 }
             });
         } else {
@@ -990,8 +1019,8 @@ public class ClientCnx extends PulsarHandler {
         }
 
         CompletableFuture<GetTopicsResult> requestFuture =
-                (CompletableFuture<GetTopicsResult>) pendingRequests.remove(requestId);
-        if (requestFuture != null) {
+                (CompletableFuture<GetTopicsResult>) pendingRequests.get(requestId);
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             requestFuture.complete(new GetTopicsResult(topics,
                     success.hasTopicsHash() ? success.getTopicsHash() : null,
                     success.isFiltered(),
@@ -1009,8 +1038,8 @@ public class ClientCnx extends PulsarHandler {
         long requestId = commandGetSchemaResponse.getRequestId();
 
         CompletableFuture<CommandGetSchemaResponse> future =
-                (CompletableFuture<CommandGetSchemaResponse>) pendingRequests.remove(requestId);
-        if (future == null) {
+                (CompletableFuture<CommandGetSchemaResponse>) pendingRequests.get(requestId);
+        if (future == null || !removePendingRequest(requestId, future)) {
             duplicatedResponseCounter.incrementAndGet();
             log.warn("{} Received unknown request id from server: {}", ctx.channel(), requestId);
             return;
@@ -1023,10 +1052,11 @@ public class ClientCnx extends PulsarHandler {
         checkArgument(state == State.Ready);
         long requestId = commandGetOrCreateSchemaResponse.getRequestId();
         CompletableFuture<CommandGetOrCreateSchemaResponse> future =
-                (CompletableFuture<CommandGetOrCreateSchemaResponse>) pendingRequests.remove(requestId);
-        if (future == null) {
+                (CompletableFuture<CommandGetOrCreateSchemaResponse>) pendingRequests.get(requestId);
+        if (future == null || !removePendingRequest(requestId, future)) {
             duplicatedResponseCounter.incrementAndGet();
-            log.warn("{} Received unknown request id from server: {}", ctx.channel(), requestId);
+            log.warn("{} Received unknown request id from server: {}", ctx.channel(),
+                    commandGetOrCreateSchemaResponse.getRequestId());
             return;
         }
         future.complete(new CommandGetOrCreateSchemaResponse().copyFrom(commandGetOrCreateSchemaResponse));
@@ -1059,7 +1089,7 @@ public class ClientCnx extends PulsarHandler {
         pendingRequests.put(requestId, future);
         (flush ? ctx.writeAndFlush(requestMessage) : ctx.write(requestMessage)).addListener(writeFuture -> {
             if (!writeFuture.isSuccess()) {
-                if (pendingRequests.remove(requestId, future) && !future.isDone()) {
+                if (removePendingRequest(requestId, future)) {
                     log.warn("{} Failed to send {} to broker: {}", ctx.channel(),
                             requestType.getDescription(), writeFuture.cause().getMessage());
                     future.completeExceptionally(writeFuture.cause());
@@ -1179,9 +1209,8 @@ public class ClientCnx extends PulsarHandler {
                     + "from server: {}", ctx.channel(), response.getRequestId());
         }
         long requestId = response.getRequestId();
-        CompletableFuture<?> requestFuture = pendingRequests.remove(requestId);
-
-        if (requestFuture != null && !requestFuture.isDone()) {
+        CompletableFuture<?> requestFuture = pendingRequests.get(requestId);
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             if (!response.hasError()) {
                 requestFuture.complete(null);
             } else {
@@ -1251,8 +1280,8 @@ public class ClientCnx extends PulsarHandler {
         }
         long requestId = commandWatchTopicListSuccess.getRequestId();
         CompletableFuture<CommandWatchTopicListSuccess> requestFuture =
-                (CompletableFuture<CommandWatchTopicListSuccess>) pendingRequests.remove(requestId);
-        if (requestFuture != null) {
+                (CompletableFuture<CommandWatchTopicListSuccess>) pendingRequests.get(requestId);
+        if (requestFuture != null && removePendingRequest(requestId, requestFuture)) {
             requestFuture.complete(new CommandWatchTopicListSuccess().copyFrom(commandWatchTopicListSuccess));
         } else {
             duplicatedResponseCounter.incrementAndGet();
@@ -1472,10 +1501,9 @@ public class ClientCnx extends PulsarHandler {
                 continue;
             }
             TimedCompletableFuture<?> requestFuture = pendingRequests.get(request.requestId);
-            if (requestFuture != null
-                    && !requestFuture.hasGotResponse()) {
-                pendingRequests.remove(request.requestId, requestFuture);
-                if (!requestFuture.isDone()) {
+            if (requestFuture != null && !requestFuture.hasGotResponse()) {
+                boolean removed = removePendingRequest(request.requestId, requestFuture);
+                if (removed) {
                     String timeoutMessage = String.format(
                             "%s timeout {'durationMs': '%d', 'reqId':'%d', 'remote':'%s', 'local':'%s'}",
                             request.requestType.getDescription(), operationTimeoutMs,
