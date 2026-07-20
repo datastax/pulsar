@@ -19,7 +19,7 @@
 
 # build go lang examples first in a separate layer
 
-FROM golang:1.23 as pulsar-function-go
+FROM golang:1.23-alpine as pulsar-function-go
 
 COPY target/pulsar-function-go/ /go/src/github.com/apache/pulsar/pulsar-function-go
 RUN cd /go/src/github.com/apache/pulsar/pulsar-function-go && go install ./...
@@ -63,9 +63,7 @@ FROM apachepulsar/pulsar:latest
 # However, any processes exec'ing into the containers will run as root, by default.
 USER root
 
-RUN rm -rf /var/lib/apt/lists/* && apt update
-
-RUN apt-get clean && apt-get update && apt-get install -y supervisor vim procps curl
+RUN apk add --no-cache supervisor procps curl
 
 RUN mkdir -p /var/log/pulsar && mkdir -p /var/run/supervisor/
 
@@ -88,6 +86,7 @@ COPY python-examples/exclamation.zip /pulsar/examples/python-examples/
 COPY python-examples/producer_schema.py /pulsar/examples/python-examples/
 COPY python-examples/consumer_schema.py /pulsar/examples/python-examples/
 COPY python-examples/exception_function.py /pulsar/examples/python-examples/
+RUN chmod g+rx /pulsar/examples/python-examples/
 
 # copy java test examples
 COPY target/java-test-functions.jar /pulsar/examples/
