@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -18,14 +18,4 @@
 # under the License.
 #
 
-set -x
-
-# Python dependencies
-# The pinned grpcio and protobuf versions should be compatible with the generated Protobuf and gRPC stubs used
-# in Pulsar Functions Python runtime. You should also update the grpcio version in src/update_python_protobuf_stubs.sh
-# and regenerate the Python stubs if you change the grpcio version here. Please see
-# pulsar-functions/instance/src/main/python/README.md for more details.
-pip3 install --no-cache-dir --only-binary \
-  grpcio==1.78.0 \
-  protobuf==6.33.5 \
-  pulsar-client[all]==${PULSAR_CLIENT_PYTHON_VERSION}
+/usr/glibc-compat/sbin/ldconfig
