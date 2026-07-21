@@ -95,7 +95,7 @@ public class HealthCheckTest extends TestRetrySupport {
 
     @Test
     public void testZooKeeperDown() throws Exception {
-        pulsarCluster.getZooKeeper().execCmd("pkill", "-STOP", "-f", "QuorumPeerMain");
+        pulsarCluster.getZooKeeper().execCmd("pkill", "-STOP", "java");
         assertHealthcheckFailure();
     }
 
@@ -111,7 +111,7 @@ public class HealthCheckTest extends TestRetrySupport {
     @Test
     public void testBookKeeperDown() throws Exception {
         for (BKContainer b : pulsarCluster.getBookies()) {
-            b.execCmd("pkill", "-STOP", "-f", "Main");
+            b.execCmd("pkill", "-STOP", "java");
         }
         assertHealthcheckFailure();
     }
