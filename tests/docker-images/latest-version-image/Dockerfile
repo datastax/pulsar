@@ -31,9 +31,12 @@ FROM apachepulsar/pulsar-all:latest as pulsar-all
 
 
 # patch Oracle Debezium Connector nar file to include Oracle JDBC dependencies
+# pulsar-all is Alpine-based and its jlink JRE does include jar, but curl is not
+# installed by default — add it explicitly for this build-only stage.
 FROM apachepulsar/pulsar-all:latest as oracle-jdbc-builder
 
 USER root
+RUN apk add --no-cache curl
 WORKDIR /
 
 RUN OJDBC_VERSION="19.3.0.0" && \
