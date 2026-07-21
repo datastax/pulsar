@@ -692,6 +692,27 @@ public class FunctionConfigUtilsTest {
     }
 
     @Test
+    public void testConsumerProperties() {
+        FunctionConfig functionConfig = createFunctionConfig();
+
+        Map<String, String> consumerProperties = new HashMap<>();
+        consumerProperties.put("consumerName", "window-consumer");
+        Map<String, ConsumerConfig> inputSpecs = new HashMap<>();
+        inputSpecs.put("test-input", ConsumerConfig.builder()
+                .consumerProperties(consumerProperties)
+                .build());
+        functionConfig.setInputSpecs(inputSpecs);
+
+        FunctionDetails functionDetails = FunctionConfigUtils.convert(functionConfig);
+        assertEquals(functionDetails.getSource().getInputSpecsMap().get("test-input").getConsumerPropertiesMap(),
+                consumerProperties);
+
+        FunctionConfig convertedConfig = FunctionConfigUtils.convertFromDetails(functionDetails);
+        assertEquals(convertedConfig.getInputSpecs().get("test-input").getConsumerProperties(),
+                consumerProperties);
+    }
+
+    @Test
     public void testConvertProducerSpecToProducerConfigAndBackToProducerSpec() {
         // given
         Function.ProducerSpec producerSpec = Function.ProducerSpec.newBuilder()
