@@ -1291,6 +1291,21 @@ public class ManagedCursorImpl implements ManagedCursor {
 
     @Override
     public long getEstimatedSizeSinceMarkDeletePosition() {
+        Position markDeletePosition = this.markDeletePosition;
+        Position lastPosition = ledger.getLastPosition();
+        if (markDeletePosition == null || markDeletePosition.compareTo(lastPosition) == 0) {
+            return 0;
+        }
+        if (markDeletePosition.compareTo(lastPosition) > 0) {
+            if (!ledger.ledgerExists(lastPosition.getLedgerId())
+                    || isMarkDeletePositionOnEmptyCurrentLedger(markDeletePosition)) {
+                return 0;
+            }
+            throw new IllegalArgumentException(String.format(
+                    "Cursor %s mark-delete position %s is ahead of the last position %s for managed ledger %s",
+                    name, markDeletePosition, lastPosition, ledger.getName()));
+        }
+
         long totalSize = ledger.estimateBacklogFromPosition(markDeletePosition);
 
         // Need to subtract size of individual deleted messages
@@ -1303,7 +1318,7 @@ public class ManagedCursorImpl implements ManagedCursor {
         long deletedCount = 0;
         lock.readLock().lock();
         try {
-            Range<Position> backlogRange = Range.openClosed(markDeletePosition, ledger.getLastPosition());
+            Range<Position> backlogRange = Range.openClosed(markDeletePosition, lastPosition);
 
             if (getConfig().isUnackedRangesOpenCacheSetEnabled()) {
                 deletedCount = individualDeletedMessages.cardinality(
@@ -1330,7 +1345,7 @@ public class ManagedCursorImpl implements ManagedCursor {
         }
 
         // Estimate size by using average entry size from the backlog range
-        Range<Position> backlogRange = Range.openClosed(markDeletePosition, ledger.getLastPosition());
+        Range<Position> backlogRange = Range.openClosed(markDeletePosition, lastPosition);
         long totalEntriesInBacklog = ledger.getNumberOfEntries(backlogRange);
 
         if (totalEntriesInBacklog <= deletedCount || totalEntriesInBacklog == 0) {
@@ -1354,6 +1369,12 @@ public class ManagedCursorImpl implements ManagedCursor {
         }
 
         return adjustedSize;
+    }
+
+    private boolean isMarkDeletePositionOnEmptyCurrentLedger(Position markDeletePosition) {
+        return ledger.currentLedger != null
+                && markDeletePosition.getLedgerId() == ledger.currentLedger.getId()
+                && ledger.currentLedgerEntries == 0;
     }
 
     private long getNumberOfEntriesInBacklog() {
