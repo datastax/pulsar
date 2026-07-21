@@ -411,6 +411,7 @@ public class FunctionConfigUtils {
             }
             consumerConfig.setRegexPattern(input.getValue().getIsRegexPattern());
             consumerConfig.setSchemaProperties(input.getValue().getSchemaPropertiesMap());
+            consumerConfig.setConsumerProperties(input.getValue().getConsumerPropertiesMap());
             consumerConfig.setPoolMessages(input.getValue().getPoolMessages());
             consumerConfigMap.put(input.getKey(), consumerConfig);
         }
