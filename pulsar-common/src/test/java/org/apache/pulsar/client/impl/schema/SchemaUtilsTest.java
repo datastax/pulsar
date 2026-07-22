@@ -31,28 +31,29 @@ import org.testng.annotations.Test;
 
 public class SchemaUtilsTest {
 
+    private static final String SCHEMA_WITH_NULL_DEFAULTS = "{\n"
+            + "  \"type\": \"record\",\n"
+            + "  \"name\": \"Root\",\n"
+            + "  \"fields\": [\n"
+            + "    {\n"
+            + "      \"name\": \"user_info\",\n"
+            + "      \"type\": {\n"
+            + "        \"type\": \"record\",\n"
+            + "        \"name\": \"UserInfo\",\n"
+            + "        \"fields\": [\n"
+            + "          {\"name\": \"user_id\", \"type\": \"string\", \"default\": \"\"},\n"
+            + "          {\"name\": \"meter_id\", \"type\": [\"null\", \"string\"], \"default\": null}\n"
+            + "        ]\n"
+            + "      },\n"
+            + "      \"default\": {\"user_id\": \"\", \"meter_id\": null}\n"
+            + "    }\n"
+            + "  ]\n"
+            + "}";
+
     @Test
     public void testJsonifySchemaInfoPreservesNullDefaults() throws Exception {
-        SchemaInfo schemaInfo = new SchemaInfoImpl("test-schema", """
-                        {
-                          "type": "record",
-                          "name": "Root",
-                          "fields": [
-                            {
-                              "name": "user_info",
-                              "type": {
-                                "type": "record",
-                                "name": "UserInfo",
-                                "fields": [
-                                  {"name": "user_id", "type": "string", "default": ""},
-                                  {"name": "meter_id", "type": ["null", "string"], "default": null}
-                                ]
-                              },
-                              "default": {"user_id": "", "meter_id": null}
-                            }
-                          ]
-                        }
-                        """.getBytes(UTF_8), SchemaType.AVRO, 0, Collections.emptyMap());
+        SchemaInfo schemaInfo = new SchemaInfoImpl("test-schema", SCHEMA_WITH_NULL_DEFAULTS.getBytes(UTF_8),
+                SchemaType.AVRO, 0, Collections.emptyMap());
 
         assertNullDefaults(SchemaUtils.jsonifySchemaInfo(schemaInfo, true).getBytes(UTF_8));
 
