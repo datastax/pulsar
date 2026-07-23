@@ -1668,19 +1668,10 @@ flexible messaging model and an intuitive client API.</description>
 
       <dependency>
         <groupId>org.jetbrains.kotlin</groupId>
-        <artifactId>kotlin-stdlib</artifactId>
+        <artifactId>kotlin-bom</artifactId>
         <version>${kotlin-stdlib.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.jetbrains.kotlin</groupId>
-        <artifactId>kotlin-stdlib-common</artifactId>
-        <version>${kotlin-stdlib.version}</version>
-      </dependency>
-
-      <dependency>
-        <groupId>org.jetbrains.kotlin</groupId>
-        <artifactId>kotlin-stdlib-jdk8</artifactId>
-        <version>${kotlin-stdlib.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
 
       <dependency>
