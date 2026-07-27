@@ -43,6 +43,10 @@ RUN for SUBDIRECTORY in conf data download logs instances/deps; do \
 RUN chmod -R g+rx /pulsar/bin
 RUN chmod -R o+rx /pulsar
 
+# Trino writes logs to this directory (at least during tests), so we need to give the process permission
+# to create those log directories. This should be removed when Trino is removed.
+RUN [ -d /pulsar/trino ] && chmod g+w /pulsar/trino || true
+
 ## Create 2nd stage to build the Python dependencies
 ## Since it needs to have GCC available, we're doing it in a different layer
 FROM alpine:3.21 AS python-deps
