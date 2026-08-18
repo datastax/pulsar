@@ -39,6 +39,7 @@ env:
     -Xmx2048m
     -XX:+UnlockDiagnosticVMOptions
     -XX:+IgnoreUnrecognizedVMOptions
+    -XX:GCLockerRetryAllocationCount=100
     -Daether.connector.http.reuseConnections=false
     -Daether.connector.requestTimeout=60000
     -Dhttp.keepAlive=false
@@ -48,12 +49,6 @@ env:
     -Dmaven.wagon.http.retryHandler.requestSentEnabled=true
     -Dmaven.wagon.http.serviceUnavailableRetryStrategy.class=standard
     -Dmaven.wagon.rto=60000
-
-# ------------------------------------------------------------------ #
-#  Shared build steps (composite, defined inline via reusable logic)   #
-#  are inlined into each job below because GHA composite actions can't #
-#  share secrets.  Keep the two jobs in sync when editing.             #
-# ------------------------------------------------------------------ #
 
 jobs:
   # ------------------------------------------------------------------ #
