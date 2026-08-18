@@ -80,17 +80,9 @@ jobs:
         run: |
           echo "$TRUSTSTORE_B64" | base64 --decode > "${{ env.TRUSTSTORE_PATH }}"
 
-      # Compile the project and generate JaCoCo coverage reports so that
-      # SonarQube receives byte-code and coverage data for a richer analysis.
-      # -DskipTests avoids a lengthy full test run inside the scanner job;
-      # the "coverage" profile activates the jacoco-maven-plugin prepare-agent
-      # and report executions already declared in the root pom.xml.
-      - name: Build and collect coverage data
-        run: |
-          mvn -B verify \
-            -Pcoverage \
-            -DskipTests \
-            --no-transfer-progress
+      # Produce .class files required by SonarQube's Java bytecode analyser.
+      - name: Compile
+        run: mvn -B compile --no-transfer-progress
 
       # Pinned to v8.2.1 (SHA: 22918119ff8e1ca75a623e15c8296b6ea4fbe28f).
       - name: Run SonarQube scan
@@ -106,7 +98,6 @@ jobs:
             -D sonar.sources=.
             -D sonar.exclusions=**/proto/**,**/shade/**,**/shaded/**,**/target/**
             -D sonar.java.binaries=**/target/classes
-            -D sonar.coverage.jacoco.xmlReportPaths=**/target/site/jacoco/jacoco.xml
             -D sonar.scanner.truststorePath=${{ env.TRUSTSTORE_PATH }}
             -D sonar.scanner.truststorePassword=${{ secrets.IBM_SONARQUBE_CERT_PASSWORD }}
             ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.scan_type == 'pr'))
