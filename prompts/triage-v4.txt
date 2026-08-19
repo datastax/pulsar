@@ -1,8 +1,0 @@
-Classify the CVE scan results from stdin into a triage JSON array.
-
-For each CVE record, add these fields:
-- fix_type: one of java-dep-bump / os-base-bump / dockerfile-change / no-fix-monitor
-- affected_branches: ["3.1_ds","4.0_ds"]
-- priority_score: 10 (CRITICAL+fix), 9 (CRITICAL+no-fix), 8 (HIGH+fix), 7 (HIGH+no-fix), 4 (MEDIUM), 1 (LOW)
-
-Return only the JSON array, no other text.
