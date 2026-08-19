@@ -1,6 +1,6 @@
 # Hackathon Overview — CVE Automation Pipeline
 
-**Branch:** `3.1_ds` · **Code Engine project:** `cve-automation` · **IBM Cloud region:** `us-south`
+**Working branch:** `hackathon/cve-ai-agent-triage` · **Code Engine project:** `cve-automation` · **IBM Cloud region:** `us-south`
 
 Welcome to the AUTOMATE-CVE hackathon. The spike (CVE-000) is complete. The scanner image is
 pre-built and live in IBM Container Registry. Your job is to build the remaining pipeline stages
@@ -48,9 +48,48 @@ Then read **your pair's starting materials** listed in [`hackathon-plan.md`](../
 
 ---
 
+## Git workflow — branch from here, not from 3.1_ds or master
+
+**All hackathon work branches off `hackathon/cve-ai-agent-triage`.**
+Do not branch from `3.1_ds` (production) or `master`.
+
+```bash
+# Clone (first time)
+git clone https://github.com/datastax/pulsar.git
+cd pulsar
+
+# Check out the hackathon base branch
+git fetch origin
+git checkout hackathon/cve-ai-agent-triage
+
+# Create your pair's working branch from it
+# Pair A:
+git checkout -b pair-a/cve-triage
+
+# Pair B:
+git checkout -b pair-b/cve-fix-agents
+
+# Pair C:
+git checkout -b pair-c/cve-observability
+```
+
+Push your work to origin as you go:
+
+```bash
+git push origin pair-a/cve-triage
+```
+
+When your Code Engine job is working and your YAML is committed, open a PR targeting
+`hackathon/cve-ai-agent-triage` (not master, not 3.1_ds).
+
+---
+
 ## Day-1 checklist (do this first, before writing any code)
 
 ```bash
+# 0. Check out the hackathon branch (see Git workflow above)
+git checkout hackathon/cve-ai-agent-triage
+
 # 1. Log in to IBM Cloud
 ibmcloud login --apikey "${IBM_CLOUD_API_KEY}" -r us-south
 

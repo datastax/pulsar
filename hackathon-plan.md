@@ -12,7 +12,9 @@ the AUTOMATE-CVE pipeline. The spike (AUTOMATE-CVE-000) is complete. The scanner
 **Environment:** Single shared IBM Cloud account. Code Engine project: `cve-automation`.
 Job names are namespaced per pair (e.g. `pair-a-cve-triage-3x`).
 
-**Branch for all work:** `3.1_ds`
+**Branch for all work:** `hackathon/cve-ai-agent-triage` (base) → each pair creates their own
+branch from it (e.g. `pair-a/cve-triage`). PRs target `hackathon/cve-ai-agent-triage`, not master
+or `3.1_ds`.
 
 ---
 
@@ -76,7 +78,7 @@ IBM Code Engine, IBM Secrets Manager, and Trivy. Engineers know Docker and GitHu
 5. Write `docs/hackathon/README.md` — hackathon overview, team assignments, day-1 checklist
 
 **Expected Outcomes**
-- All 5 docs committed to `docs/hackathon/` on the `3.1_ds` branch
+- All 5 docs committed to `docs/hackathon/` on the `hackathon/cve-ai-agent-triage` branch ✅ done
 - Each doc is self-contained: install → authenticate → one real command relevant to the pipeline
 - Engineers can complete the study week by reading only these files + the ADR
 
