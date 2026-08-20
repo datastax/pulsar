@@ -92,6 +92,13 @@ ENV LANG C.UTF-8
 # (abseil-cpp, re2, c-ares, etc.) are correctly resolved in the final image
 RUN apk add --no-cache \
             bash \
+            curl \
+            wget \
+            bind-tools \
+            netcat-openbsd \
+            procps \
+            less \
+            vim \
             python3 \
             py3-pip \
             py3-grpcio \
