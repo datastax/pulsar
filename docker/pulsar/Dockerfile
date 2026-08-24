@@ -104,7 +104,8 @@ RUN apk add --no-cache \
             py3-grpcio \
             py3-yaml \
             gcompat \
-            ca-certificates
+            ca-certificates \
+            openssl
 
 # Install GLibc compatibility library
 COPY --from=glibc /root/packages /root/packages
