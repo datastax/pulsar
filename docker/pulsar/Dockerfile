@@ -42,6 +42,7 @@ RUN for SUBDIRECTORY in conf data download logs instances/deps packages-storage;
 
 RUN chmod -R g+rx /pulsar/bin
 RUN chmod -R ug+rwx /pulsar
+RUN chown 10000:0 /pulsar
 
 # Trino writes logs to this directory (at least during tests), so we need to give the process permission
 # to create those log directories. This should be removed when Trino is removed.
