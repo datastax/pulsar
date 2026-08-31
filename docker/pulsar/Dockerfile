@@ -122,6 +122,12 @@ ENV PULSAR_ROOT_LOGGER=INFO,CONSOLE
 
 COPY --from=pulsar /pulsar /pulsar
 
+# COPY --from resets the destination directory owner to root:root regardless of
+# what was set in the source stage. Re-apply ownership here so that uid 10000
+# can write directly into /pulsar (e.g. token-superuser-stripped.jwt written by
+# the Helm chart startup script when enableTokenAuth=true).
+RUN chown 10000:0 /pulsar
+
 WORKDIR /pulsar
 ENV PATH=$PATH:$JAVA_HOME/bin:/pulsar/bin
 
