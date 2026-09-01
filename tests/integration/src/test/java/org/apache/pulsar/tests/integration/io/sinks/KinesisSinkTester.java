@@ -83,6 +83,7 @@ public class KinesisSinkTester extends SinkTester<LocalStackContainer> {
         sinkConfig.put("awsStsEndpoint", NAME);
         sinkConfig.put("awsStsPort", LOCALSTACK_SERVICE_PORT);
         sinkConfig.put("skipCertificateValidation", true);
+        sinkConfig.put("aggregationEnabled", false);
         if (withSchema) {
             sinkConfig.put("messageFormat", "FULL_MESSAGE_IN_JSON_EXPAND_VALUE");
         }
