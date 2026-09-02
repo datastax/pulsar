@@ -28,7 +28,9 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -55,6 +57,8 @@ import org.apache.pulsar.io.core.Source;
 
 @Slf4j
 public class SourceConfigUtils {
+
+    private static final List<String> VALID_LOG_LEVELS = Arrays.asList("INFO", "DEBUG", "WARN", "ERROR");
 
     @Getter
     @Setter
@@ -180,6 +184,9 @@ public class SourceConfigUtils {
         if (!StringUtils.isEmpty(sourceConfig.getCustomRuntimeOptions())) {
             functionDetailsBuilder.setCustomRuntimeOptions(sourceConfig.getCustomRuntimeOptions());
         }
+        if (sourceConfig.getLogLevel() != null) {
+            functionDetailsBuilder.setLogLevel(sourceConfig.getLogLevel());
+        }
 
         return FunctionConfigUtils.validateFunctionDetails(functionDetailsBuilder.build());
     }
@@ -249,6 +256,9 @@ public class SourceConfigUtils {
 
         if (!isEmpty(functionDetails.getCustomRuntimeOptions())) {
             sourceConfig.setCustomRuntimeOptions(functionDetails.getCustomRuntimeOptions());
+        }
+        if (!isEmpty(functionDetails.getLogLevel())) {
+            sourceConfig.setLogLevel(functionDetails.getLogLevel());
         }
 
         return sourceConfig;
@@ -356,6 +366,12 @@ public class SourceConfigUtils {
                 log.warn("Skipping annotation based validation of sink config as classloading is disabled");
             }
         }
+        if (!isEmpty(sourceConfig.getLogLevel())) {
+            if (!VALID_LOG_LEVELS.contains(sourceConfig.getLogLevel().toUpperCase())) {
+                throw new IllegalArgumentException(
+                        String.format("LogLevel %s is invalid", sourceConfig.getLogLevel()));
+            }
+        }
 
         return new ExtractedSourceDetails(sourceClassName, typeArg.asErasure().getTypeName());
     }
@@ -424,6 +440,9 @@ public class SourceConfigUtils {
         }
         if (newConfig.getProducerConfig() != null) {
             mergedConfig.setProducerConfig(newConfig.getProducerConfig());
+        }
+        if (!StringUtils.isEmpty(newConfig.getLogLevel())) {
+            mergedConfig.setLogLevel(newConfig.getLogLevel());
         }
         return mergedConfig;
     }

@@ -31,6 +31,7 @@ import com.google.gson.reflect.TypeToken;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -62,6 +63,8 @@ import org.apache.pulsar.functions.proto.Function.FunctionDetails;
 @Slf4j
 public class SinkConfigUtils {
 
+    private static final List<String> VALID_LOG_LEVELS = Arrays.asList("INFO", "DEBUG", "WARN", "ERROR");
+
     @Getter
     @Setter
     @AllArgsConstructor
@@ -88,6 +91,9 @@ public class SinkConfigUtils {
             functionDetailsBuilder.setName(sinkConfig.getName());
         }
         functionDetailsBuilder.setRuntime(FunctionDetails.Runtime.JAVA);
+        if (sinkConfig.getLogLevel() != null) {
+            functionDetailsBuilder.setLogLevel(sinkConfig.getLogLevel());
+        }
         if (sinkConfig.getParallelism() != null) {
             functionDetailsBuilder.setParallelism(sinkConfig.getParallelism());
         } else {
@@ -396,6 +402,9 @@ public class SinkConfigUtils {
         if (!isEmpty(functionDetails.getUserConfig())) {
             sinkConfig.setTransformFunctionConfig(functionDetails.getUserConfig());
         }
+        if (!isEmpty(functionDetails.getLogLevel())) {
+            sinkConfig.setLogLevel(functionDetails.getLogLevel());
+        }
 
 
         return sinkConfig;
@@ -546,6 +555,13 @@ public class SinkConfigUtils {
         if (sinkConfig.getRetainKeyOrdering() != null && sinkConfig.getRetainKeyOrdering()
                 && sinkConfig.getRetainOrdering() != null && sinkConfig.getRetainOrdering()) {
             throw new IllegalArgumentException("Only one of retain ordering or retain key ordering can be set");
+        }
+
+        if (!isEmpty(sinkConfig.getLogLevel())) {
+            if (!VALID_LOG_LEVELS.contains(sinkConfig.getLogLevel().toUpperCase())) {
+                throw new IllegalArgumentException(
+                        String.format("LogLevel %s is invalid", sinkConfig.getLogLevel()));
+            }
         }
 
         // validate user defined config if enabled and classloading is enabled
@@ -711,6 +727,9 @@ public class SinkConfigUtils {
         }
         if (newConfig.getSourceSubscriptionPosition() != null) {
             mergedConfig.setSourceSubscriptionPosition(newConfig.getSourceSubscriptionPosition());
+        }
+        if (!StringUtils.isEmpty(newConfig.getLogLevel())) {
+            mergedConfig.setLogLevel(newConfig.getLogLevel());
         }
         return mergedConfig;
     }
