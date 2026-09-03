@@ -130,6 +130,8 @@ RUN chown 10000:0 /pulsar
 
 WORKDIR /pulsar
 ENV PATH=$PATH:$JAVA_HOME/bin:/pulsar/bin
+# Preload gcompat library for glibc compatibility with Netty native libraries
+ENV LD_PRELOAD=/lib/libgcompat.so.0
 
 # The UID must be non-zero. Otherwise, it is arbitrary. No logic should rely on its specific value.
 ARG DEFAULT_USERNAME=pulsar
