@@ -48,31 +48,11 @@ RUN chown 10000:0 /pulsar
 # to create those log directories. This should be removed when Trino is removed.
 RUN [ -d /pulsar/trino ] && chmod g+w /pulsar/trino || true
 
-## Create 2nd stage to build the Python dependencies
-## Since it needs to have GCC available, we're doing it in a different layer
-FROM alpine:3.21 AS python-deps
-
-RUN apk add --no-cache \
-       python3-dev \
-       g++ \
-       musl-dev \
-       libffi-dev \
-       py3-pip
-
-RUN pip3 install --break-system-packages \
-        kazoo
-
-ARG PULSAR_CLIENT_PYTHON_VERSION
-RUN pip3 install --break-system-packages \
-    pulsar-client[all]==${PULSAR_CLIENT_PYTHON_VERSION}
-
-
 ###  Create one stage to include JVM distribution
-FROM alpine:3.21 AS jvm
+# Use the official Amazon Corretto image instead of manually fetching the APK signing key
+FROM amazoncorretto:17-alpine3.21 AS jvm
 
-RUN wget -O /etc/apk/keys/amazoncorretto.rsa.pub https://apk.corretto.aws/amazoncorretto.rsa.pub
-RUN echo "https://apk.corretto.aws" >> /etc/apk/repositories
-RUN apk add --no-cache amazon-corretto-17 binutils
+RUN apk add --no-cache binutils
 
 # Use JLink to create a slimmer JDK distribution (see: https://adoptium.net/blog/2021/10/jlink-to-produce-own-runtime/)
 # This still includes all JDK modules, though in the future we could compile a list of required modules
@@ -81,16 +61,12 @@ RUN echo networkaddress.cache.ttl=1 >> /opt/jvm/conf/security/java.security
 RUN echo networkaddress.cache.negative.ttl=1 >> /opt/jvm/conf/security/java.security
 
 
-FROM apachepulsar/glibc-base:2.38 as glibc
-
 ## Create final stage from Alpine image
 ## and add OpenJDK and Python dependencies (for Pulsar functions)
 FROM alpine:3.21
 ENV LANG C.UTF-8
 
-# Install some utilities and runtime dependencies for Python packages
-# py3-grpcio is installed via apk to ensure all its shared library dependencies
-# (abseil-cpp, re2, c-ares, etc.) are correctly resolved in the final image
+# Install some utilities and runtime dependencies for Pulsar scripts and native libraries
 RUN apk add --no-cache \
             bash \
             curl \
@@ -102,21 +78,33 @@ RUN apk add --no-cache \
             vim \
             python3 \
             py3-pip \
-            py3-grpcio \
             py3-yaml \
             gcompat \
+            libgcc \
+            libstdc++ \
+            libuuid \
             ca-certificates \
-            openssl
+            openssl \
+            coreutils
 
-# Install GLibc compatibility library
-COPY --from=glibc /root/packages /root/packages
-RUN apk add --allow-untrusted --force-overwrite /root/packages/glibc-*.apk
+# Upgrade all packages to get latest versions with security fixes
+RUN apk upgrade --no-cache
+
+# Python dependencies
+# The pinned grpcio and protobuf versions should be compatible with the generated Protobuf and gRPC stubs used
+# in Pulsar Functions Python runtime. You should also update the grpcio version in src/update_python_protobuf_stubs.sh
+# and regenerate the Python stubs if you change the grpcio version here. Please see
+# pulsar-functions/instance/src/main/python/README.md for more details.
+ARG PULSAR_CLIENT_PYTHON_VERSION
+RUN pip3 install --break-system-packages --no-cache-dir \
+    --only-binary grpcio,pulsar-client \
+    grpcio==1.78.0 \
+    protobuf==6.33.6 \
+    pulsar-client[all]==${PULSAR_CLIENT_PYTHON_VERSION} \
+    kazoo
 
 COPY --from=jvm /opt/jvm /opt/jvm
 ENV JAVA_HOME=/opt/jvm
-
-# Copy Python dependencies from the other stage
-COPY --from=python-deps /usr/lib/python3.12/site-packages /usr/lib/python3.12/site-packages
 
 ENV PULSAR_ROOT_LOGGER=INFO,CONSOLE
 
@@ -130,10 +118,14 @@ RUN chown 10000:0 /pulsar
 
 WORKDIR /pulsar
 ENV PATH=$PATH:$JAVA_HOME/bin:/pulsar/bin
+# The default PID dir /pulsar/bin cannot be written by uid 10000; use /pulsar/logs instead
+ENV PULSAR_PID_DIR=/pulsar/logs
+# Use musl libc library for RocksDB
+ENV ROCKSDB_MUSL_LIBC=true
 # Preload gcompat library for glibc compatibility with Netty native libraries
 ENV LD_PRELOAD=/lib/libgcompat.so.0
 
 # The UID must be non-zero. Otherwise, it is arbitrary. No logic should rely on its specific value.
 ARG DEFAULT_USERNAME=pulsar
-RUN adduser ${DEFAULT_USERNAME} -u 10000 -G root -D
+RUN adduser ${DEFAULT_USERNAME} -u 10000 -G root -D -H -h /pulsar/data
 USER 10000
