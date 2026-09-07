@@ -2032,6 +2032,8 @@ flexible messaging model and an intuitive client API.</description>
             <exclude>src/test/resources/*.txt</exclude>
             <exclude>**/*_pb2.py</exclude>
             <exclude>**/*_pb2_grpc.py</exclude>
+            <!-- Patch files cannot contain license headers -->
+            <exclude>**/*.patch</exclude>
           </excludes>
         </configuration>
       </plugin>
