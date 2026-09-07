@@ -244,6 +244,8 @@
           <excludes>
             <!-- This is generated during maven build -->
             <exclude>dependency-reduced-pom.xml</exclude>
+            <!-- TestNG generated test reports do not require license headers -->
+            <exclude>test-output/**</exclude>
           </excludes>
         </configuration>
       </plugin>
