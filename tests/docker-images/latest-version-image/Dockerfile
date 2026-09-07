@@ -114,6 +114,10 @@ COPY --from=pulsar-all /pulsar/connectors/pulsar-io-jdbc-postgres-*.nar /pulsar/
 COPY --from=pulsar-all /pulsar/connectors/pulsar-io-kafka-*.nar /pulsar/connectors/
 COPY --from=pulsar-all /pulsar/connectors/pulsar-io-kinesis-*.nar /pulsar/connectors/
 
+# Copy the KPL native binary and set the path env var so the Kinesis sink can find it
+COPY --from=pulsar-all /opt/amazon-kinesis-producer/bin/ /opt/amazon-kinesis-producer/bin/
+ENV PULSAR_IO_KINESIS_KPL_PATH=/opt/amazon-kinesis-producer/bin/kinesis_producer
+
 # Copy patched Oracle Debezium Connector nar file which includes Oracle JDBC dependencies
 COPY --from=oracle-jdbc-builder /pulsar/connectors/pulsar-io-debezium-oracle-*.nar /pulsar/connectors/
 
