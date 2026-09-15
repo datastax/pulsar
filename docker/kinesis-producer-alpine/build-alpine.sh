@@ -92,7 +92,7 @@ if [ ! -d "protobuf-${PROTOBUF_VERSION}" ]; then
 
   cd protobuf-${PROTOBUF_VERSION}
   silence conf --enable-shared=no
-  silence make -j 4
+  silence make -j$(nproc)
   silence make install
 
   cd ..
@@ -123,7 +123,7 @@ if [ ! -d "aws-sdk-cpp" ]; then
     -DCMAKE_FIND_FRAMEWORK=LAST \
     -DENABLE_TESTING="OFF" \
     ../aws-sdk-cpp
-  silence make -j4
+  silence make -j$(nproc)
   silence make install
 
   cd ..
@@ -136,7 +136,7 @@ cd ..
 cd /build/amazon-kinesis-producer
 ln -fs ../third_party
 $CMAKE -DCMAKE_PREFIX_PATH="$INSTALL_DIR" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
-make -j4
+make -j$(nproc)
 
 FINAL_DIR=/opt/amazon-kinesis-producer
 # copy the binary
