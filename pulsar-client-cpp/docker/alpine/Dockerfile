@@ -18,7 +18,7 @@
 #
 
 
-FROM alpine:3.11
+FROM alpine:3.24.2
 
 RUN apk update \
     && apk upgrade \
