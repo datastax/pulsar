@@ -20,9 +20,14 @@
 
 set -e
 set -x
+SILENT="${SILENT:-y}"
 
 silence() {
-  "$@"
+  if [ "$SILENT" = "y" ]; then
+    "$@" >/dev/null 2>&1
+  else
+    "$@"
+  fi
 }
 
 BOOST_VERSION="1.88.0"
@@ -74,8 +79,8 @@ if [ ! -d "boost_${BOOST_VERSION_UNDERSCORED}" ]; then
   # Run boost build with -j1 and reduced optimization to stay well within memory limits
   OPTS="-j1 --build-type=minimal --layout=system --prefix=$INSTALL_DIR link=static threading=multi release cxxflags=-O2 install"
 
-  ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=gcc
-  ./b2 toolset=gcc $OPTS
+  silence ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=gcc
+  silence ./b2 toolset=gcc $OPTS
 
   cd ..
 fi
@@ -115,8 +120,8 @@ if [ ! -d "aws-sdk-cpp" ]; then
     -DCMAKE_FIND_FRAMEWORK=LAST \
     -DENABLE_TESTING="OFF" \
     ../aws-sdk-cpp
-  make -j$(nproc)
-  make install
+  silence make -j$(nproc)
+  silence make install
 
   cd ..
 
@@ -127,8 +132,8 @@ cd ..
 # Build the native kinesis producer
 cd /build/amazon-kinesis-producer
 ln -fs ../third_party
-$CMAKE -DCMAKE_PREFIX_PATH="$INSTALL_DIR" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
-make kinesis_producer test_driver
+silence $CMAKE -DCMAKE_PREFIX_PATH="$INSTALL_DIR" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
+silence make kinesis_producer test_driver
 
 FINAL_DIR=/opt/amazon-kinesis-producer
 # copy the binary
