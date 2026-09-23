@@ -55,6 +55,7 @@ RUN apk update && apk add --no-cache \
     upx
 
 ENV LANG=C.UTF-8
+RUN git config --global --add safe.directory '*'
 
 RUN mkdir /build
 COPY kinesis_producer_alpine.patch /build/

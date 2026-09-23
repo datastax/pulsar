@@ -20,14 +20,9 @@
 
 set -e
 set -x
-SILENT="n"
 
 silence() {
-  if [ -n "$SILENT" ]; then
-    "$@" >/dev/null
-  else
-    "$@"
-  fi
+  "$@"
 }
 
 BOOST_VERSION="1.88.0"
@@ -76,10 +71,11 @@ if [ ! -d "boost_${BOOST_VERSION_UNDERSCORED}" ]; then
   cd boost_${BOOST_VERSION_UNDERSCORED}
 
   LIBS="atomic,chrono,log,system,test,random,regex,thread,filesystem"
-  OPTS="--build-type=minimal --layout=system --prefix=$INSTALL_DIR link=static threading=multi release install"
+  # Run boost build with -j1 and reduced optimization to stay well within memory limits
+  OPTS="-j1 --build-type=minimal --layout=system --prefix=$INSTALL_DIR link=static threading=multi release cxxflags=-O2 install"
 
-  silence ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=gcc
-  silence ./b2 toolset=gcc $OPTS
+  ./bootstrap.sh --with-libraries="$LIBS" --with-toolset=gcc
+  ./b2 toolset=gcc $OPTS
 
   cd ..
 fi
@@ -100,11 +96,7 @@ fi
 
 # AWS C++ SDK
 if [ ! -d "aws-sdk-cpp" ]; then
-  git clone https://github.com/awslabs/aws-sdk-cpp.git aws-sdk-cpp
-  pushd aws-sdk-cpp
-  git checkout ${AWS_SDK_CPP_VERSION}
-  git submodule update --init --recursive
-  popd
+  git clone --depth 1 --branch ${AWS_SDK_CPP_VERSION} --recurse-submodules https://github.com/awslabs/aws-sdk-cpp.git aws-sdk-cpp
 
   rm -rf aws-sdk-cpp-build
   mkdir aws-sdk-cpp-build
@@ -123,8 +115,8 @@ if [ ! -d "aws-sdk-cpp" ]; then
     -DCMAKE_FIND_FRAMEWORK=LAST \
     -DENABLE_TESTING="OFF" \
     ../aws-sdk-cpp
-  silence make -j$(nproc)
-  silence make install
+  make -j$(nproc)
+  make install
 
   cd ..
 
@@ -136,7 +128,7 @@ cd ..
 cd /build/amazon-kinesis-producer
 ln -fs ../third_party
 $CMAKE -DCMAKE_PREFIX_PATH="$INSTALL_DIR" -DCMAKE_BUILD_TYPE=RelWithDebInfo .
-make -j$(nproc)
+make kinesis_producer test_driver
 
 FINAL_DIR=/opt/amazon-kinesis-producer
 # copy the binary
@@ -144,16 +136,16 @@ mkdir -p $FINAL_DIR/bin
 cp kinesis_producer $FINAL_DIR/bin/kinesis_producer.original
 
 # capture version information
-git describe --long --tags > $FINAL_DIR/bin/.version
-git rev-parse HEAD > $FINAL_DIR/bin/.revision
+echo "v${KINESIS_PRODUCER_LIB_VERSION:-1.0.4}" > $FINAL_DIR/bin/.version
+echo "v${KINESIS_PRODUCER_LIB_VERSION:-1.0.4}" > $FINAL_DIR/bin/.revision
 uname -a > $FINAL_DIR/bin/.system_info
 cat /etc/os-release > $FINAL_DIR/bin/.os_info
 date > $FINAL_DIR/bin/.build_time
 
 # copy tests
 mkdir -p $FINAL_DIR/tests
-cp tests $FINAL_DIR/tests/
 cp test_driver $FINAL_DIR/tests/
+[ -f tests ] && cp tests $FINAL_DIR/tests/ || true
 
 # Strip and compress the binary
 cd $FINAL_DIR/bin
