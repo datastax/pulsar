@@ -89,12 +89,12 @@ flexible messaging model and an intuitive client API.</description>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <redirectTestOutputToFile>true</redirectTestOutputToFile>
-    <test.additional.args></test.additional.args>
+    <test.additional.args/>
     <testReuseFork>true</testReuseFork>
     <testForkCount>4</testForkCount>
     <testRealAWS>false</testRealAWS>
     <testRetryCount>1</testRetryCount>
-    <testJacocoAgentArgument></testJacocoAgentArgument>
+    <testJacocoAgentArgument/>
     <docker.organization>apachepulsar</docker.organization>
     <skipSourceReleaseAssembly>false</skipSourceReleaseAssembly>
     <skipBuildDistribution>false</skipBuildDistribution>
@@ -213,7 +213,7 @@ flexible messaging model and an intuitive client API.</description>
     <cron-utils.version>9.1.6</cron-utils.version>
     <spring-context.version>5.3.19</spring-context.version>
     <apache-http-client.version>4.5.13</apache-http-client.version>
-    <jetcd.version>0.5.11</jetcd.version>
+    <jetcd.version>0.7.0</jetcd.version>
     <snakeyaml.version>2.0</snakeyaml.version>
     <ant.version>1.10.12</ant.version>
     <seancfoley.ipaddress.version>5.3.3</seancfoley.ipaddress.version>
