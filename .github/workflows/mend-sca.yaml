@@ -1,4 +1,4 @@
-name: 🔬 Mend CLI SCA
+name: Mend CLI SCA
 
 on:
   push:
@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MEND_PROJECTNAME: "Pulsar"
+  MEND_PROJECTNAME: "Astra Streaming"
   MEND_URL: "https://ibmets.whitesourcesoftware.com"
   MEND_REPORT: "mend-results.json"
   MEND_REPO: ${{ github.event.repository.name }}
