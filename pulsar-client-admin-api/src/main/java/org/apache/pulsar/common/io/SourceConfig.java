@@ -48,6 +48,8 @@ public class SourceConfig {
 
     private String schemaType;
 
+    private String logLevel;
+
     private Map<String, Object> configs;
     // This is a map of secretName(aka how the secret is going to be
     // accessed in the function via context) to an object that
