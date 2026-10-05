@@ -44,8 +44,11 @@ jobs:
           java-version: '17'
           cache: maven
 
+      # Install all modules so the local Maven repository is fully populated for
+      # Mend's dependency resolution. Exclude distribution/io and distribution/offloaders
+      # to avoid the .nar assembly step that fails when DnarPluginPhase=none is set.
       - name: Build (skip tests)
-        run: mvn -B -ntp package -DskipTests -Dspotbugs.skip=true -Dlicense.skip=true -Dcheckstyle.skip=true -Drat.skip=true -DskipDocker=true -DnarPluginPhase=none
+        run: mvn -B -ntp clean install -DskipTests -Dspotbugs.skip=true -Dlicense.skip=true -Dcheckstyle.skip=true -Drat.skip=true -DskipDocker=true -DnarPluginPhase=none -pl '!distribution/io,!distribution/offloaders'
 
       - name: Download Mend CLI
         run: |
