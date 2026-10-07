@@ -1,0 +1,105 @@
+name: Mend CLI OSS
+
+on:
+  push:
+    branches:
+      - 4.0_ds
+      - 3.1_ds
+    tags: [ '**' ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - 4.0_ds
+      - 3.1_ds
+  workflow_dispatch:
+
+concurrency:
+  group: mend-oss-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MEND_PROJECTNAME: "Astra Streaming"
+  MEND_URL: "https://ibmets.whitesourcesoftware.com"
+  MEND_REPORT: "mend-results.json"
+  MEND_REPO: ${{ github.event.repository.name }}
+
+jobs:
+  mend-cli-scan:
+    name: Mend SCA Scan
+    runs-on: ubuntu-latest
+    # Red on findings but never blocks PRs or releases.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Tune Runner VM
+        uses: ./.github/actions/tune-runner-vm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      # Install all modules so the local Maven repository is fully populated for
+      # Mend's dependency resolution. Exclude distribution/io and distribution/offloaders
+      # to avoid the .nar assembly step that fails when DnarPluginPhase=none is set.
+      - name: Build (skip tests)
+        run: mvn -B -ntp clean install -DskipTests -Dspotbugs.skip=true -Dlicense.skip=true -Dcheckstyle.skip=true -Drat.skip=true -DskipDocker=true -DnarPluginPhase=none -pl '!distribution/io,!distribution/offloaders'
+
+      - name: Download Mend CLI
+        run: |
+          curl -fsSL https://downloads.mend.io/cli/linux_amd64/mend -o ./mend
+          chmod +x ./mend
+
+      # On tagged releases: scan and update the Mend platform project.
+      - name: Run Mend dep scan (release — update platform)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
+          MEND_PRODUCTNAME: ${{ secrets.MEND_PRODUCTNAME }}
+          MEND_ORGNAME: Products
+          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
+        run: |
+          ./mend dep --dir . \
+            --scope "$MEND_ORGNAME//$MEND_PRODUCTNAME//$MEND_PROJECTNAME - $MEND_REPO" \
+            --export-results "$MEND_REPORT" \
+            --non-interactive \
+            --update 2>&1 | tee mend-output.txt
+
+      # On pushes and PRs: scan and report only (no platform update).
+      - name: Run Mend dep scan (non-release — report only)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        env:
+          MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
+          MEND_PRODUCTNAME: ${{ secrets.MEND_PRODUCTNAME }}
+          MEND_ORGNAME: Products
+          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
+        run: |
+          ./mend dep --dir . \
+            --scope "$MEND_ORGNAME//$MEND_PRODUCTNAME//$MEND_PROJECTNAME - $MEND_REPO" \
+            --export-results "$MEND_REPORT" \
+            --non-interactive 2>&1 | tee mend-output.txt
+
+      # Mend CLI exits 0 even on findings; parse stdout and fail the job on Critical/High.
+      - name: Fail on Critical/High findings
+        if: always()
+        run: |
+          [ -f mend-output.txt ] || { echo "::warning::Mend scan output not found."; exit 0; }
+          summary=$(grep 'Detected .* vulnerabilities' mend-output.txt || true)
+          critical=$(echo "$summary" | sed 's/.*(\([0-9]*\) Critical.*/\1/' | grep -E '^[0-9]+$' || echo 0)
+          high=$(echo "$summary"     | sed 's/.*(\([0-9]* Critical, \)\([0-9]*\) High.*/\2/' | grep -E '^[0-9]+$' || echo 0)
+          if [ "$((${critical:-0} + ${high:-0}))" -gt 0 ]; then
+            echo "::error::Mend SCA: ${critical:-0} Critical, ${high:-0} High — see mend-scan-report artifact."
+            exit 1
+          fi
+
+      - name: Upload Mend scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mend-scan-report
+          path: ${{ env.MEND_REPORT }}
