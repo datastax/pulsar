@@ -1,4 +1,4 @@
-name: Mend CLI SCA
+name: Mend CLI OSS
 
 on:
   push:
@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: mend-sca-${{ github.ref }}
+  group: mend-oss-${{ github.ref }}
   cancel-in-progress: true
 
 env:
