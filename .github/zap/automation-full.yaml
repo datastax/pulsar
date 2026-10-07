@@ -1,0 +1,71 @@
+# OWASP ZAP Automation Framework plan — full (passive + active) scan.
+#
+# Equivalent in spirit to zap-full-scan.py, but uses the Automation Framework
+# so the "report" job can emit real SARIF via the sarif-json template —
+# neither zap-baseline.py nor zap-full-scan.py has a SARIF output flag.
+#
+# Only triggered manually (workflow_dispatch, scan_type: full) — active
+# scanning sends attack payloads and is slower (~20-40 min).
+#
+# Run with: zap.sh -cmd -autorun automation-full.yaml
+env:
+  contexts:
+    - name: pulsar-admin-api
+      urls:
+        - http://localhost:8080
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: spider
+    parameters:
+      context: pulsar-admin-api
+      url: http://localhost:8080
+      maxDuration: 5
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  - type: activeScan
+    parameters:
+      context: pulsar-admin-api
+      maxScanDurationInMins: 40
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk
+      reportFile: zap-report.html
+      reportTitle: Pulsar DAST - OWASP ZAP Full Scan
+      reportDescription: Passive + active scan of the Pulsar admin REST API.
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk
+      reportFile: zap-report.json
+      reportTitle: Pulsar DAST - OWASP ZAP Full Scan
+      reportDescription: Passive + active scan of the Pulsar admin REST API.
+
+  # See automation-baseline.yaml for why reportFile ends in ".sarif.json".
+  - type: report
+    parameters:
+      template: sarif-json
+      reportDir: /zap/wrk
+      reportFile: zap-report.sarif.json
+      reportTitle: Pulsar DAST - OWASP ZAP Full Scan
+      reportDescription: Passive + active scan of the Pulsar admin REST API.
+
+  # See automation-baseline.yaml for why errorLevel/warnLevel/warnExitValue
+  # are set this way.
+  - type: exitStatus
+    parameters:
+      errorExitValue: 1
+      warnExitValue: 0

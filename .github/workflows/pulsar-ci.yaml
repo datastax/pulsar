@@ -71,6 +71,14 @@ on:
           - 'fail_on_leak'
           - 'off'
         default: 'report'
+      dast_scan_type:
+        description: 'OWASP ZAP DAST scan type for the zap-dast-scan job'
+        required: true
+        type: choice
+        options:
+          - baseline
+          - full
+        default: baseline
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}${{ github.event_name == 'workflow_dispatch' && github.event.inputs.jdk_major_version || '' }}
@@ -562,6 +570,135 @@ jobs:
         continue-on-error: true
         with:
           action: wait
+
+  # Dynamic Application Security Testing (DAST) using OWASP ZAP.
+  #
+  # References:
+  #   IBM AppSec external docs : https://pages.github.ibm.com/Supply-Chain-Security/AppSec-External-Docs/appsec/owasp-zap/overview/
+  #   DataStax onboarding runbook: https://datastax.jira.com/wiki/spaces/EN/pages/6253151136/Guidance+-+OWASP+ZAP+Onboarding+Runbook
+  #
+  # Scans the apachepulsar/java-test-image:latest image that pulsar-java-test-image
+  # already built from the current source tree and cached as a GitHub Actions
+  # artifact — not the public apachepulsar/pulsar image from Docker Hub — so the
+  # scan reflects what's actually in this branch/PR. That image is just the
+  # docker/pulsar distribution image with extra test tooling layered on
+  # (tests/docker-images/java-test-image/Dockerfile: FROM $PULSAR_IMAGE), so
+  # bin/pulsar standalone and ports 8080/6650 behave identically.
+  #
+  # Only runs the JDK 21 cron (0 12 * * *); the JDK 17 cron is a second full
+  # matrix run of the same CI, not a reason to also re-run the DAST scan.
+  zap-dast-scan:
+    name: OWASP ZAP DAST Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: ['preconditions', 'pulsar-java-test-image']
+    if: >
+      needs.preconditions.outputs.docs_only != 'true' &&
+      (github.event_name == 'pull_request' ||
+       github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *'))
+    permissions:
+      contents: read
+      # Required by the IBM AppSec runbook: upload SARIF results to GitHub
+      # Security / Code Scanning so findings appear in the Security tab.
+      security-events: write
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: Install gh-actions-artifact-client.js
+        uses: apache/pulsar-test-infra/gh-actions-artifact-client/dist@master
+
+      - name: Load docker image apachepulsar/java-test-image:latest from Github artifact cache
+        run: |
+          $GITHUB_WORKSPACE/build/pulsar_ci_tool.sh docker_load_image_from_github_actions_artifacts pulsar-java-test-image
+
+      - name: Start Pulsar standalone broker
+        run: |
+          docker run -d \
+            --name pulsar-dast \
+            -p 8080:8080 \
+            -p 6650:6650 \
+            apachepulsar/java-test-image:latest \
+            bin/pulsar standalone
+
+      - name: Wait for Pulsar admin API to be healthy
+        run: |
+          echo "Waiting for Pulsar broker to be ready..."
+          for i in $(seq 1 24); do
+            if curl --silent --fail http://localhost:8080/admin/v2/clusters; then
+              echo ""
+              echo "Pulsar admin API is up."
+              exit 0
+            fi
+            echo "Attempt $i/24 — sleeping 5 s..."
+            sleep 5
+          done
+          echo "ERROR: Pulsar admin API did not become healthy within 120 s."
+          docker logs pulsar-dast
+          exit 1
+
+      - name: Prepare ZAP reports directory
+        run: |
+          mkdir -p "${{ github.workspace }}/zap-reports"
+          chmod 777 "${{ github.workspace }}/zap-reports"
+
+      # Scan modes (see .github/zap/automation-*.yaml for job details):
+      #   baseline — spider + passive scan only; used on PRs and the nightly
+      #              schedule. Fast (~5 min).
+      #   full     — adds an active scan job; triggered manually only.
+      #              Slower (~20-40 min).
+      #
+      # -port 8090 overrides ZAP's own local proxy port: with --network host,
+      # ZAP's default proxy port (8080) collides with the Pulsar admin API
+      # also on 8080, and ZAP fails to start at all. Confirmed by actually
+      # running this against a live broker.
+      - name: Run OWASP ZAP baseline scan
+        if: >
+          github.event_name == 'schedule' ||
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.dast_scan_type == 'baseline')
+        run: |
+          docker run --rm \
+            --network host \
+            -v "${{ github.workspace }}/zap-reports:/zap/wrk:rw" \
+            -v "${{ github.workspace }}/.github/zap:/zap/plans:ro" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -port 8090 -autorun /zap/plans/automation-baseline.yaml
+
+      - name: Run OWASP ZAP full scan
+        if: >
+          github.event_name == 'workflow_dispatch' && github.event.inputs.dast_scan_type == 'full'
+        run: |
+          docker run --rm \
+            --network host \
+            -v "${{ github.workspace }}/zap-reports:/zap/wrk:rw" \
+            -v "${{ github.workspace }}/.github/zap:/zap/plans:ro" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -port 8090 -autorun /zap/plans/automation-full.yaml
+
+      # Mandated by the IBM AppSec onboarding runbook — findings appear in
+      # the repository's Security → Code scanning alerts tab.
+      # Guard with a file-existence check: if neither scan step ran (e.g. the
+      # job was skipped mid-flight) upload-sarif would hard-fail on a missing file.
+      - name: Upload SARIF results to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('zap-reports/zap-report.sarif.json') != ''
+        with:
+          sarif_file: ${{ github.workspace }}/zap-reports/zap-report.sarif.json
+          category: dast-owasp-zap
+
+      - name: Upload ZAP scan reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-dast-reports
+          path: ${{ github.workspace }}/zap-reports/
+          retention-days: 30
+
+      - name: Stop Pulsar broker
+        if: always()
+        run: docker rm -f pulsar-dast || true
 
   integration-tests:
     name: CI - Integration - ${{ matrix.name }}

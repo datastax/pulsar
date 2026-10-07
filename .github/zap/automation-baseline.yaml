@@ -1,0 +1,70 @@
+# OWASP ZAP Automation Framework plan — baseline (passive-only) scan.
+#
+# Equivalent in spirit to zap-baseline.py, but uses the Automation Framework
+# so the "report" job can emit real SARIF via the sarif-json template —
+# neither zap-baseline.py nor zap-full-scan.py has a SARIF output flag.
+#
+# Run with: zap.sh -cmd -autorun automation-baseline.yaml
+env:
+  contexts:
+    - name: pulsar-admin-api
+      urls:
+        - http://localhost:8080
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: spider
+    parameters:
+      context: pulsar-admin-api
+      url: http://localhost:8080
+      maxDuration: 5
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk
+      reportFile: zap-report.html
+      reportTitle: Pulsar DAST - OWASP ZAP Baseline Scan
+      reportDescription: Passive-only baseline scan of the Pulsar admin REST API.
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk
+      reportFile: zap-report.json
+      reportTitle: Pulsar DAST - OWASP ZAP Baseline Scan
+      reportDescription: Passive-only baseline scan of the Pulsar admin REST API.
+
+  # NOTE: the sarif-json template ignores a ".sarif" extension and always
+  # appends ".json" to reportFile — confirmed by actually running this plan.
+  # Naming it "zap-report.sarif.json" up front avoids relying on that
+  # auto-append behavior; the workflow's upload-sarif step must match this name.
+  - type: report
+    parameters:
+      template: sarif-json
+      reportDir: /zap/wrk
+      reportFile: zap-report.sarif.json
+      reportTitle: Pulsar DAST - OWASP ZAP Baseline Scan
+      reportDescription: Passive-only baseline scan of the Pulsar admin REST API.
+
+  # Leaving errorLevel/warnLevel unset means alerts found (of any risk) do not
+  # affect the exit code — only a genuine scan-execution error does. This
+  # mirrors the old zap-baseline.py "-I" flag, keeping CI unblocked during the
+  # initial onboarding/triage period. Set errorLevel (e.g. High) once a clean
+  # baseline is established and you want hard failures on new high-risk findings.
+  #
+  # warnExitValue is also forced to 0: confirmed by testing that spidering an
+  # API which 404s at "/" (completely normal — there's no handler at the bare
+  # root) is itself classified as a plan-level warning, independent of alert
+  # risk level, and would otherwise exit 2 and fail this step on every run.
+  - type: exitStatus
+    parameters:
+      errorExitValue: 1
+      warnExitValue: 0
