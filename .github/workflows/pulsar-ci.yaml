@@ -677,6 +677,12 @@ jobs:
             ghcr.io/zaproxy/zaproxy:stable \
             zap.sh -cmd -port 8090 -autorun /zap/plans/automation-full.yaml
 
+      - name: Sanitize ZAP SARIF artifactLocation URIs
+        if: always() && hashFiles('zap-reports/zap-report.sarif.json') != ''
+        run: |
+          python3 .github/scripts/sanitize_zap_sarif.py \
+            "${{ github.workspace }}/zap-reports/zap-report.sarif.json"
+
       # Mandated by the IBM AppSec onboarding runbook — findings appear in
       # the repository's Security → Code scanning alerts tab.
       # Guard with a file-existence check: if neither scan step ran (e.g. the
