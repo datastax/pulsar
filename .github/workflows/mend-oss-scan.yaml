@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MEND_PROJECTNAME: "Astra Streaming"
-  MEND_URL: "https://ibmets.whitesourcesoftware.com"
+  MEND_PROJECTNAME: ${{ vars.MEND_PROJECTNAME }}
+  MEND_URL: ${{ vars.MEND_URL }}
   MEND_REPORT: "mend-results.json"
   MEND_REPO: ${{ github.event.repository.name }}
 
@@ -60,10 +60,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           MEND_PRODUCTNAME: ${{ vars.MEND_PRODUCTNAME }}
-          MEND_ORGNAME: Products
-          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
-          WS_APIKEY: ${{ secrets.MEND_API_KEY }}
-          WS_USERKEY: ${{ secrets.MEND_USER_KEY }}
+          MEND_ORGNAME: ${{ vars.MEND_ORGNAME }}
+          MEND_EMAIL: ${{ vars.MEND_EMAIL }}
+          MEND_API_KEY: ${{ secrets.MEND_API_KEY }}
+          MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
         run: |
           ./mend dep --dir . \
             --scope "$MEND_ORGNAME//$MEND_PRODUCTNAME//$MEND_PROJECTNAME - $MEND_REPO" \
@@ -76,10 +76,10 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/')"
         env:
           MEND_PRODUCTNAME: ${{ vars.MEND_PRODUCTNAME }}
-          MEND_ORGNAME: Products
-          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
-          WS_APIKEY: ${{ secrets.MEND_API_KEY }}
-          WS_USERKEY: ${{ secrets.MEND_USER_KEY }}
+          MEND_ORGNAME: ${{ vars.MEND_ORGNAME }}
+          MEND_EMAIL: ${{ vars.MEND_EMAIL }}
+          MEND_API_KEY: ${{ secrets.MEND_API_KEY }}
+          MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
         run: |
           ./mend dep --dir . \
             --scope "$MEND_ORGNAME//$MEND_PRODUCTNAME//$MEND_PROJECTNAME - $MEND_REPO" \
