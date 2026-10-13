@@ -81,12 +81,6 @@
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/com.microsoft.azure.kusto/kusto-ingest -->
-        <dependency>
-            <groupId>com.microsoft.azure.kusto</groupId>
-            <artifactId>kusto-ingest</artifactId>
-            <version>${kusto.sdk.version}</version>
-        </dependency>
     </dependencies>
     <build>
         <plugins>
