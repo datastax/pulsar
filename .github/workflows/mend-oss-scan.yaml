@@ -60,7 +60,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
-          MEND_PRODUCTNAME: ${{ secrets.MEND_PRODUCTNAME }}
+          MEND_PRODUCTNAME: ${{ vars.MEND_PRODUCTNAME }}
           MEND_ORGNAME: Products
           MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
         run: |
@@ -75,7 +75,7 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/')"
         env:
           MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
-          MEND_PRODUCTNAME: ${{ secrets.MEND_PRODUCTNAME }}
+          MEND_PRODUCTNAME: ${{ vars.MEND_PRODUCTNAME }}
           MEND_ORGNAME: Products
           MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
         run: |
