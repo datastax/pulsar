@@ -52,7 +52,7 @@ jobs:
 
       - name: Download Mend CLI
         run: |
-          curl -fsSL https://downloads.mend.io/cli/linux_amd64/mend -o ./mend
+          curl --proto '=https' --tlsv1.2 -fsSL https://downloads.mend.io/cli/linux_amd64/mend -o ./mend
           chmod +x ./mend
 
       # On tagged releases: scan and update the Mend platform project.
