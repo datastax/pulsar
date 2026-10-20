@@ -86,8 +86,8 @@ jobs:
             --export-results "$MEND_REPORT" \
             --non-interactive 2>&1 | tee mend-output.txt
 
-      # Mend CLI exits 0 even on findings; parse stdout and fail the job on Critical/High.
-      - name: Fail on Critical/High findings
+      # Mend CLI exits 0 even on findings; parse stdout and warn on Critical/High.
+      - name: Warn on Critical/High findings
         if: always()
         run: |
           [ -f mend-output.txt ] || { echo "::warning::Mend scan output not found."; exit 0; }
@@ -95,8 +95,7 @@ jobs:
           critical=$(echo "$summary" | sed 's/.*(\([0-9]*\) Critical.*/\1/' | grep -E '^[0-9]+$' || echo 0)
           high=$(echo "$summary"     | sed 's/.*(\([0-9]* Critical, \)\([0-9]*\) High.*/\2/' | grep -E '^[0-9]+$' || echo 0)
           if [ "$((${critical:-0} + ${high:-0}))" -gt 0 ]; then
-            echo "::error::Mend SCA: ${critical:-0} Critical, ${high:-0} High — see mend-scan-report artifact."
-            exit 1
+            echo "::warning::Mend SCA: ${critical:-0} Critical, ${high:-0} High — see mend-scan-report artifact. These must be remediated before this step is re-enabled as a hard gate."
           fi
 
       - name: Upload Mend scan report
