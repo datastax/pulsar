@@ -17,6 +17,9 @@ concurrency:
   group: mend-oss-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   MEND_PROJECTNAME: ${{ vars.MEND_PROJECTNAME }}
   MEND_URL: ${{ vars.MEND_URL }}
@@ -27,7 +30,9 @@ jobs:
   mend-cli-scan:
     name: Mend SCA Scan
     runs-on: ubuntu-latest
-    # Red on findings but never blocks PRs or releases.
+    # Fork PRs have no access to secrets, so the scan cannot authenticate; skip them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Findings only produce warnings; this job never blocks PRs or releases.
     continue-on-error: true
 
     steps:
@@ -55,38 +60,48 @@ jobs:
           curl --proto '=https' --tlsv1.2 -fsSL https://downloads.mend.io/cli/linux_amd64/mend -o ./mend
           chmod +x ./mend
 
+      # The full scan output is written to a file only. The per-vulnerability table
+      # (library, CVE ID, fix) is filtered out of the job log because logs are public
+      # on public repositories. Review full results in the Mend platform.
+
       # On tagged releases: scan and update the Mend platform project.
       - name: Run Mend dep scan (release — update platform)
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          MEND_PRODUCTNAME: ${{ vars.MEND_PRODUCTNAME }}
+          MEND_PRODUCTNAME: ${{ secrets.MEND_PRODUCTNAME }}
           MEND_ORGNAME: ${{ vars.MEND_ORGNAME }}
-          MEND_EMAIL: ${{ vars.MEND_EMAIL }}
+          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
           MEND_API_KEY: ${{ secrets.MEND_API_KEY }}
           MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
         run: |
+          rc=0
           ./mend dep --dir . \
             --scope "$MEND_ORGNAME//$MEND_PRODUCTNAME//$MEND_PROJECTNAME - $MEND_REPO" \
             --export-results "$MEND_REPORT" \
             --non-interactive \
-            --update 2>&1 | tee mend-output.txt
+            --update > mend-output.txt 2>&1 || rc=$?
+          grep -vE '^[|+]' mend-output.txt || true
+          exit "$rc"
 
       # On pushes and PRs: scan and report only (no platform update).
       - name: Run Mend dep scan (non-release — report only)
         if: "!startsWith(github.ref, 'refs/tags/')"
         env:
-          MEND_PRODUCTNAME: ${{ vars.MEND_PRODUCTNAME }}
+          MEND_PRODUCTNAME: ${{ secrets.MEND_PRODUCTNAME }}
           MEND_ORGNAME: ${{ vars.MEND_ORGNAME }}
-          MEND_EMAIL: ${{ vars.MEND_EMAIL }}
+          MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
           MEND_API_KEY: ${{ secrets.MEND_API_KEY }}
           MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
         run: |
+          rc=0
           ./mend dep --dir . \
             --scope "$MEND_ORGNAME//$MEND_PRODUCTNAME//$MEND_PROJECTNAME - $MEND_REPO" \
             --export-results "$MEND_REPORT" \
-            --non-interactive 2>&1 | tee mend-output.txt
+            --non-interactive > mend-output.txt 2>&1 || rc=$?
+          grep -vE '^[|+]' mend-output.txt || true
+          exit "$rc"
 
-      # Mend CLI exits 0 even on findings; parse stdout and warn on Critical/High.
+      # Mend CLI exits 0 even on findings; parse the output file and warn on Critical/High.
       - name: Warn on Critical/High findings
         if: always()
         run: |
@@ -95,12 +110,16 @@ jobs:
           critical=$(echo "$summary" | sed 's/.*(\([0-9]*\) Critical.*/\1/' | grep -E '^[0-9]+$' || echo 0)
           high=$(echo "$summary"     | sed 's/.*(\([0-9]* Critical, \)\([0-9]*\) High.*/\2/' | grep -E '^[0-9]+$' || echo 0)
           if [ "$((${critical:-0} + ${high:-0}))" -gt 0 ]; then
-            echo "::warning::Mend SCA: ${critical:-0} Critical, ${high:-0} High — see mend-scan-report artifact. These must be remediated before this step is re-enabled as a hard gate."
+            echo "::warning::Mend SCA found Critical/High vulnerabilities — review them in the Mend platform. These must be remediated before this step is re-enabled as a hard gate."
           fi
 
+      # Only upload the report for private repositories. On a public repository,
+      # artifacts are downloadable by anyone and would expose unpatched vulnerabilities.
       - name: Upload Mend scan report
-        if: always()
+        if: always() && github.event.repository.private
         uses: actions/upload-artifact@v4
         with:
           name: mend-scan-report
-          path: ${{ env.MEND_REPORT }}
+          path: |
+            ${{ env.MEND_REPORT }}
+            mend-output.txt
