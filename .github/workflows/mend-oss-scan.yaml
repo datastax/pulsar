@@ -113,13 +113,25 @@ jobs:
             echo "::warning::Mend SCA found Critical/High vulnerabilities — review them in the Mend platform. These must be remediated before this step is re-enabled as a hard gate."
           fi
 
-      # Only upload the report for private repositories. On a public repository,
-      # artifacts are downloadable by anyone and would expose unpatched vulnerabilities.
-      - name: Upload Mend scan report
-        if: always() && github.event.repository.private
+      # Artifacts are downloadable by anyone signed in to GitHub on a public repository
+      # and would expose unpatched vulnerabilities, so encrypt the report before upload.
+      # Decrypt with: gpg -d mend-results.json.gpg > mend-results.json
+      - name: Encrypt Mend scan report
+        if: ${{ !cancelled() }}
+        env:
+          MEND_REPORT_PASSPHRASE: ${{ secrets.MEND_PRODUCTNAME }}
+        run: |
+          [ -f "$MEND_REPORT" ] || { echo "::warning::Mend report not found; nothing to encrypt."; exit 0; }
+          [ -n "$MEND_REPORT_PASSPHRASE" ] || { echo "::error::MEND_PRODUCTNAME secret is not set, so there is no passphrase; refusing to upload an unencrypted report."; exit 1; }
+          printf '%s' "$MEND_REPORT_PASSPHRASE" | gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --pinentry-mode loopback --passphrase-fd 0 -o "$MEND_REPORT.gpg" "$MEND_REPORT"
+
+      - name: Upload encrypted Mend scan report
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: mend-scan-report
-          path: |
-            ${{ env.MEND_REPORT }}
-            mend-output.txt
+          path: ${{ env.MEND_REPORT }}.gpg
+          if-no-files-found: ignore
+          retention-days: 14
+
