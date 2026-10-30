@@ -281,6 +281,36 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
     }
 
     /**
+     * Handles a failure that happens between setting the pending read flag and the submission of the
+     * read returning, including errors such as {@link OutOfMemoryError} which are not handled
+     * anywhere else on this path. Without this recovery no completion would ever clear the flag and
+     * the dispatcher would stop reading until the topic is unloaded (issue #26454).
+            *
+            * <p>The recovery is best-effort: the failure may also come from inside the managed cursor after
+     * it already took over the read, in which case cursor-side state, such as the pending read
+     * operations counter, can still be left behind. {@code onReadEnded} is only notified when
+     * {@code onReadStarted} was reached, to keep the read-started/read-ended notifications paired.
+     */
+    private void handleReadSchedulingFailure(Throwable failure, ReadType readType, boolean readStarted) {
+        if (readType == ReadType.Normal) {
+            havePendingRead = false;
+            // The failure may have happened after the read was already registered inside the
+            // managed cursor to wait for new entries: cancel it so the cleared flag cannot leave
+            // the cursor waiting.
+            cursor.cancelPendingReadRequest();
+        } else {
+            havePendingReplayRead = false;
+        }
+
+        if (readStarted) {
+            onReadEnded(readType);
+        }
+
+        log.error("Failed to schedule read of messages, readType={}, readStarted={}", readType, readStarted, failure);
+        scheduleReadEntriesWithDelay(new ManagedLedgerException(failure), readType,
+                readFailureBackoff.next());
+    }
+    /**
      * We should not call readMoreEntries() recursively in the same thread as there is a risk of StackOverflowError.
      *
      */
@@ -326,18 +356,30 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
                 }
 
                 havePendingReplayRead = true;
-                minReplayedPosition = messagesToReplayNow.first();
-                Set<? extends Position> deletedMessages = topic.isDelayedDeliveryEnabled()
-                        ? asyncReplayEntriesInOrder(messagesToReplayFiltered)
-                        : asyncReplayEntries(messagesToReplayFiltered);
-                // clear already acked positions from replay bucket
 
+                Set<? extends Position> deletedMessages;
+                boolean readStarted = false;
+                try {
+                    minReplayedPosition = messagesToReplayNow.first();
+                    onReadStarted(ReadType.Replay);
+                    readStarted = true;
+                    deletedMessages = topic.isDelayedDeliveryEnabled()
+                            ? asyncReplayEntriesInOrder(messagesToReplayFiltered)
+                            : asyncReplayEntries(messagesToReplayFiltered);
+                } catch (Throwable failure) {
+                    // Nothing else would ever clear the flag after this failure (issue #26454).
+                    handleReadSchedulingFailure(failure, ReadType.Replay, readStarted);
+                    return;
+                }
+
+                // clear already acked positions from replay bucket
                 deletedMessages.forEach(position -> redeliveryMessages.remove(((PositionImpl) position).getLedgerId(),
                         ((PositionImpl) position).getEntryId()));
                 // if all the entries are acked-entries and cleared up from redeliveryMessages, try to read
                 // next entries as readCompletedEntries-callback was never called
                 if ((messagesToReplayFiltered.size() - deletedMessages.size()) == 0) {
                     havePendingReplayRead = false;
+                    onReadEnded(ReadType.Replay);
                     readMoreEntriesAsync();
                 }
             } else if (BLOCKED_DISPATCHER_ON_UNACKMSG_UPDATER.get(this) == TRUE) {
@@ -351,27 +393,23 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
                             consumerList.size());
                 }
                 havePendingRead = true;
-                NavigableSet<PositionImpl> toReplay = getMessagesToReplayNow(1);
-                if (!toReplay.isEmpty()) {
-                    minReplayedPosition = toReplay.first();
-                    redeliveryMessages.add(minReplayedPosition.getLedgerId(), minReplayedPosition.getEntryId());
-                } else {
-                    minReplayedPosition = null;
-                }
-
-                // Filter out and skip read delayed messages exist in DelayedDeliveryTracker
-                if (delayedDeliveryTracker.isPresent()) {
-                    Predicate<PositionImpl> skipCondition = null;
-                    final DelayedDeliveryTracker deliveryTracker = delayedDeliveryTracker.get();
-                    if (deliveryTracker instanceof BucketDelayedDeliveryTracker) {
-                        skipCondition = position -> ((BucketDelayedDeliveryTracker) deliveryTracker)
-                                .containsMessage(position.getLedgerId(), position.getEntryId());
+                boolean readStarted = false;
+                try {
+                    NavigableSet<PositionImpl> toReplay = getMessagesToReplayNow(1);
+                    if (!toReplay.isEmpty()) {
+                        minReplayedPosition = toReplay.first();
+                        redeliveryMessages.add(minReplayedPosition.getLedgerId(), minReplayedPosition.getEntryId());
+                    } else {
+                        minReplayedPosition = null;
                     }
+                    onReadStarted(ReadType.Normal);
+
                     cursor.asyncReadEntriesWithSkipOrWait(messagesToRead, bytesToRead, this, ReadType.Normal,
-                            topic.getMaxReadPosition(), skipCondition);
-                } else {
-                    cursor.asyncReadEntriesOrWait(messagesToRead, bytesToRead, this, ReadType.Normal,
-                            topic.getMaxReadPosition());
+                            topic.getMaxReadPosition(), createReadEntriesSkipConditionForNormalRead());
+
+                } catch (Throwable failure) {
+                    // Nothing else would ever clear the flag after this failure (issue #26454).
+                    handleReadSchedulingFailure(failure, ReadType.Normal, readStarted);
                 }
             } else {
                 if (log.isDebugEnabled()) {
@@ -390,6 +428,37 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
                 log.debug("[{}] Consumer buffer is full, pause reading", name);
             }
         }
+    }
+
+    protected synchronized Predicate<PositionImpl> createReadEntriesSkipConditionForNormalRead() {
+        Predicate<PositionImpl> skipCondition = null;
+        // Filter out and skip read delayed messages exist in DelayedDeliveryTracker
+        if (delayedDeliveryTracker.isPresent()) {
+            final DelayedDeliveryTracker deliveryTracker = delayedDeliveryTracker.get();
+            if (deliveryTracker instanceof BucketDelayedDeliveryTracker) {
+                skipCondition = position -> ((BucketDelayedDeliveryTracker) deliveryTracker)
+                        .containsMessage(position.getLedgerId(), position.getEntryId());
+            }
+        }
+        return skipCondition;
+    }
+
+    /**
+     * Called under the dispatcher's monitor when a normal or a replay read starts. A normal read and a replay read
+     * can be in flight at the same time. With the default direct dispatch, a read of a type doesn't start before the
+     * previous read of the same type was dispatched; with {@code dispatcherDispatchMessagesInSubscriptionThread}, it
+     * can start while the previous one's dispatch is still queued, see {@link #onDispatchQueued(ReadType)}. A read
+     * ends with the dispatch of its entries, in {@link #trySendMessagesToConsumers(ReadType, List)}, or with
+     * {@link #onReadEnded(ReadType)}.
+     */
+    protected void onReadStarted(ReadType readType) {
+    }
+
+    /**
+     * Called under the dispatcher's monitor when a read ends without its entries being dispatched: it failed, was
+     * cancelled, read only deleted entries, or completed after every consumer disconnected.
+     */
+    protected void onReadEnded(ReadType readType) {
     }
 
     @Override
@@ -557,6 +626,7 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
     protected void cancelPendingRead() {
         if (havePendingRead && cursor.cancelPendingReadRequest()) {
             havePendingRead = false;
+            onReadEnded(ReadType.Normal);
         }
     }
 
@@ -606,6 +676,7 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
             entries.forEach(Entry::release);
             cursor.rewind();
             shouldRewindBeforeReadingOrReplaying = false;
+            onReadEnded(readType);
             readMoreEntries();
             return;
         }
@@ -860,6 +931,17 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
     public synchronized void readEntriesFailed(ManagedLedgerException exception, Object ctx) {
 
         ReadType readType = (ReadType) ctx;
+
+        // Clear the pending read flag before anything that might throw, as readEntriesComplete does:
+        // if this callback dies midway, nothing would ever clear the flag again and the dispatcher
+        // would stall until the topic is unloaded (issue #26454).
+        if (readType == ReadType.Normal) {
+            havePendingRead = false;
+        } else {
+            havePendingReplayRead = false;
+        }
+        onReadEnded(readType);
+
         long waitTimeMillis = readFailureBackoff.next();
 
         // Do not keep reading more entries if the cursor is already closed.
@@ -897,14 +979,10 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
             cursor.rewind();
         }
 
-        if (readType == ReadType.Normal) {
-            havePendingRead = false;
-        } else {
-            havePendingReplayRead = false;
-            if (exception instanceof ManagedLedgerException.InvalidReplayPositionException) {
-                PositionImpl markDeletePosition = (PositionImpl) cursor.getMarkDeletedPosition();
-                redeliveryMessages.removeAllUpTo(markDeletePosition.getLedgerId(), markDeletePosition.getEntryId());
-            }
+        if (readType == ReadType.Replay
+                && exception instanceof ManagedLedgerException.InvalidReplayPositionException) {
+            Position markDeletePosition = cursor.getMarkDeletedPosition();
+            redeliveryMessages.removeAllUpTo(markDeletePosition.getLedgerId(), markDeletePosition.getEntryId());
         }
 
         readBatchSize = serviceConfig.getDispatcherMinReadBatchSize();
