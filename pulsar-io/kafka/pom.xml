@@ -144,12 +144,6 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Override the lz4-java version which gets pulled transitively -->
-    <dependency>
-      <groupId>at.yawk.lz4</groupId>
-      <artifactId>lz4-java</artifactId>
-    </dependency>
-
   </dependencies>
 
   <build>
