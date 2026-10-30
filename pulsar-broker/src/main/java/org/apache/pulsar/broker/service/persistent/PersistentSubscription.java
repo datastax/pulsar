@@ -246,59 +246,10 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
                 }
 
                 if (dispatcher == null || !dispatcher.isConsumerConnected()) {
-                    Dispatcher previousDispatcher = null;
-                    switch (consumer.subType()) {
-                        case Exclusive:
-                            if (dispatcher == null || dispatcher.getType() != SubType.Exclusive) {
-                                previousDispatcher = dispatcher;
-                                dispatcher = new PersistentDispatcherSingleActiveConsumer(
-                                        cursor, SubType.Exclusive, 0, topic, this);
-                            }
-                            break;
-                        case Shared:
-                            if (dispatcher == null || dispatcher.getType() != SubType.Shared) {
-                                previousDispatcher = dispatcher;
-                                dispatcher = new PersistentDispatcherMultipleConsumers(topic, cursor, this);
-                            }
-                            break;
-                        case Failover:
-                            int partitionIndex = TopicName.getPartitionIndex(topicName);
-                            if (partitionIndex < 0) {
-                                // For non partition topics, use a negative index so
-                                // dispatcher won't sort consumers before picking
-                                // an active consumer for the topic.
-                                partitionIndex = -1;
-                            }
-
-                            if (dispatcher == null || dispatcher.getType() != SubType.Failover) {
-                                previousDispatcher = dispatcher;
-                                dispatcher = new PersistentDispatcherSingleActiveConsumer(cursor, SubType.Failover,
-                                                partitionIndex, topic, this);
-                            }
-                            break;
-                        case Key_Shared:
-                            KeySharedMeta ksm = consumer.getKeySharedMeta();
-                            if (dispatcher == null || dispatcher.getType() != SubType.Key_Shared
-                                    || !((PersistentStickyKeyDispatcherMultipleConsumers) dispatcher)
-                                    .hasSameKeySharedPolicy(ksm)) {
-                                previousDispatcher = dispatcher;
-                                dispatcher = new PersistentStickyKeyDispatcherMultipleConsumers(topic, cursor, this,
-                                        topic.getBrokerService().getPulsar().getConfiguration(), ksm);
-                            }
-                            break;
-                        default:
-                            return FutureUtil.failedFuture(
-                                    new ServerMetadataException("Unsupported subscription type"));
+                    if (consumer.subType() == null) {
+                        return FutureUtil.failedFuture(new ServerMetadataException("Unsupported subscription type"));
                     }
-
-                    if (previousDispatcher != null) {
-                        previousDispatcher.close().thenRun(() -> {
-                            log.info("[{}][{}] Successfully closed previous dispatcher", topicName, subName);
-                        }).exceptionally(ex -> {
-                            log.error("[{}][{}] Failed to close previous dispatcher", topicName, subName, ex);
-                            return null;
-                        });
-                    }
+                    dispatcher = reuseOrCreateDispatcher(dispatcher, consumer);
                 } else {
                     if (consumer.subType() != dispatcher.getType()) {
                         return FutureUtil.failedFuture(
@@ -309,6 +260,68 @@ public class PersistentSubscription extends AbstractSubscription implements Subs
                 return dispatcher.addConsumer(consumer);
             }
         });
+    }
+
+    /**
+     * Create a new dispatcher or reuse the existing one when it's compatible with the new consumer.
+     * This protected method can be overridden for testing purpose for injecting test dispatcher instances with
+     * special behaviors.
+     * @param dispatcher the existing dispatcher
+     * @param consumer the new consumer
+     * @return the dispatcher to use, either the existing one or a new one
+     */
+    protected Dispatcher reuseOrCreateDispatcher(Dispatcher dispatcher, Consumer consumer) {
+        Dispatcher previousDispatcher = null;
+        switch (consumer.subType()) {
+            case Exclusive:
+                if (dispatcher == null || dispatcher.getType() != SubType.Exclusive) {
+                    previousDispatcher = dispatcher;
+                    dispatcher = new PersistentDispatcherSingleActiveConsumer(
+                            cursor, SubType.Exclusive, 0, topic, this);
+                }
+                break;
+            case Shared:
+                if (dispatcher == null || dispatcher.getType() != SubType.Shared) {
+                    previousDispatcher = dispatcher;
+                    dispatcher = new PersistentDispatcherMultipleConsumers(topic, cursor, this);
+                }
+                break;
+            case Failover:
+                int partitionIndex = TopicName.getPartitionIndex(topicName);
+                if (partitionIndex < 0) {
+                    // For non partition topics, use a negative index so
+                    // dispatcher won't sort consumers before picking
+                    // an active consumer for the topic.
+                    partitionIndex = -1;
+                }
+
+                if (dispatcher == null || dispatcher.getType() != SubType.Failover) {
+                    previousDispatcher = dispatcher;
+                    dispatcher = new PersistentDispatcherSingleActiveConsumer(cursor, SubType.Failover,
+                            partitionIndex, topic, this);
+                }
+                break;
+            case Key_Shared:
+                KeySharedMeta ksm = consumer.getKeySharedMeta();
+                if (dispatcher == null || dispatcher.getType() != SubType.Key_Shared
+                        || !((PersistentStickyKeyDispatcherMultipleConsumers) dispatcher)
+                        .hasSameKeySharedPolicy(ksm)) {
+                    previousDispatcher = dispatcher;
+                    dispatcher = new PersistentStickyKeyDispatcherMultipleConsumers(topic, cursor, this,
+                            topic.getBrokerService().getPulsar().getConfiguration(), ksm);
+                }
+                break;
+        }
+
+        if (previousDispatcher != null) {
+            previousDispatcher.close().thenRun(() -> {
+                log.info("[{}][{}] Successfully closed previous dispatcher", topicName, subName);
+            }).exceptionally(ex -> {
+                log.error("[{}][{}] Failed to close previous dispatcher", topicName, subName, ex);
+                return null;
+            });
+        }
+        return dispatcher;
     }
 
     @Override
