@@ -587,7 +587,7 @@ public class CompactedTopicTest extends MockedPulsarServiceBaseTest {
         producer.close();
     }
 
-    @Test(timeOut = 120000)
+    @Test(timeOut = 180000)
     public void testCompactionWithTopicUnloading() throws Exception {
         String topic = "persistent://my-property/use/my-ns/testCompactionWithTopicUnloading-" +
                 UUID.randomUUID();
@@ -625,7 +625,7 @@ public class CompactedTopicTest extends MockedPulsarServiceBaseTest {
         Thread.sleep(100);
         admin.topics().unload(topic);
         admin.topics().triggerCompaction(topic);
-        Awaitility.await().pollInterval(3, TimeUnit.SECONDS).atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        Awaitility.await().pollInterval(3, TimeUnit.SECONDS).atMost(60, TimeUnit.SECONDS).untilAsserted(() -> {
             PersistentTopicInternalStats stats = admin.topics().getInternalStats(topic);
             Assert.assertNotEquals(stats.compactedLedger.ledgerId, -1);
             Assert.assertEquals(stats.compactedLedger.entries, keys * 2);

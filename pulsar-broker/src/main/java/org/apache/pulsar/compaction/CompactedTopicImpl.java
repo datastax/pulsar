@@ -68,9 +68,49 @@ public class CompactedTopicImpl implements CompactedTopic {
 
     private volatile PositionImpl compactionHorizon = null;
     private volatile CompletableFuture<CompactedTopicContext> compactedTopicContext = null;
+    private volatile CompletableFuture<Void> horizonRecoveryFuture = CompletableFuture.completedFuture(null);
 
     public CompactedTopicImpl(BookKeeper bk) {
         this.bk = bk;
+    }
+
+    @Override
+    public CompletableFuture<CompactedTopicContext> recoverCompactedLedger(Position markDeletePosition,
+                                                                          long compactedLedgerId) {
+        synchronized (this) {
+            CompletableFuture<CompactedTopicContext> previousContext =
+                    newCompactedLedger(markDeletePosition, compactedLedgerId);
+            CompletableFuture<CompactedTopicContext> recoveredContext = compactedTopicContext;
+            horizonRecoveryFuture = readLastEntryOfCompactedLedger().thenAccept(lastEntry -> {
+                if (lastEntry == null) {
+                    return;
+                }
+                try {
+                    PositionImpl lastCompactedPosition = (PositionImpl) lastEntry.getPosition();
+                    synchronized (CompactedTopicImpl.this) {
+                        // Skip if a newer compaction already replaced the ledger and the horizon.
+                        if (compactedTopicContext == recoveredContext && compactionHorizon != null
+                                && compactionHorizon.compareTo(lastCompactedPosition) < 0) {
+                            log.info("[__compaction] Move compaction horizon from {} to {}, the last entry of"
+                                    + " compacted ledger {}", compactionHorizon, lastCompactedPosition,
+                                    compactedLedgerId);
+                            compactionHorizon = lastCompactedPosition;
+                        }
+                    }
+                } finally {
+                    lastEntry.release();
+                }
+            }).exceptionally(ex -> {
+                log.warn("[__compaction] Failed to read the last entry of compacted ledger {}, keep compaction"
+                        + " horizon {}", compactedLedgerId, markDeletePosition, ex);
+                return null;
+            });
+            return previousContext;
+        }
+    }
+
+    public CompletableFuture<Void> getHorizonRecoveryFuture() {
+        return horizonRecoveryFuture;
     }
 
     @Override
@@ -401,6 +441,7 @@ public class CompactedTopicImpl implements CompactedTopic {
     public void reset() {
         this.compactionHorizon = null;
         this.compactedTopicContext = null;
+        this.horizonRecoveryFuture = CompletableFuture.completedFuture(null);
     }
 
     @Nullable

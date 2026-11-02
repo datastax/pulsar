@@ -29,6 +29,12 @@ import org.apache.pulsar.broker.service.Consumer;
 
 public interface CompactedTopic {
     CompletableFuture<CompactedTopicContext> newCompactedLedger(Position p, long compactedLedgerId);
+
+    default CompletableFuture<CompactedTopicContext> recoverCompactedLedger(Position markDeletePosition,
+                                                                           long compactedLedgerId) {
+        return newCompactedLedger(markDeletePosition, compactedLedgerId);
+    }
+
     CompletableFuture<Void> deleteCompactedLedger(long compactedLedgerId);
 
     /**

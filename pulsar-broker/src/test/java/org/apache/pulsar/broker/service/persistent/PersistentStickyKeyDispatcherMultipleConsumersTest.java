@@ -508,7 +508,7 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
             Object ctx = invocationOnMock.getArgument(3);
             callback.readEntriesComplete(copyEntries(entries), ctx);
             return null;
-        }).when(cursorMock).asyncReadEntriesOrWait(anyInt(), anyLong(), any(), any(), any());
+        }).when(cursorMock).asyncReadEntriesWithSkipOrWait(anyInt(), anyLong(), any(), any(), any(), any());
 
         doReturn(true).when(slowConsumerMock).isWritable();
         CountDownLatch message3Sent = new CountDownLatch(1);
@@ -633,7 +633,7 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
             return alreadyReceived;
         }).when(cursorMock).asyncReplayEntries(anySet(), any(), any(), anyBoolean());
 
-        // Mock Cursor#asyncReadEntriesOrWait
+        // Mock Cursor#asyncReadEntriesWithSkipOrWait
         doAnswer(invocationOnMock -> {
             int maxEntries = invocationOnMock.getArgument(0);
             Set<Position> alreadyReceived = new TreeSet<>();
@@ -647,7 +647,7 @@ public class PersistentStickyKeyDispatcherMultipleConsumersTest {
             Object ctx = invocationOnMock.getArgument(3);
             callback.readEntriesComplete(copyEntries(entries), ctx);
             return null;
-        }).when(cursorMock).asyncReadEntriesOrWait(anyInt(), anyLong(), any(), any(), any());
+        }).when(cursorMock).asyncReadEntriesWithSkipOrWait(anyInt(), anyLong(), any(), any(), any(), any());
 
         // add entries to redeliver
         redeliverEntries.forEach(entry -> {
