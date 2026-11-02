@@ -152,14 +152,15 @@ public class PersistentDispatcherMultipleConsumersTest extends ProducerConsumerB
 
         Mockito.doReturn(false).when(cursor).isClosed();
 
-        // Mock the readEntriesOrWait(...) to simulate the cursor is closed.
+        // Mock the asyncReadEntriesWithSkipOrWait(...) to simulate the cursor is closed.
+        // Note: readMoreEntries() uses asyncReadEntriesWithSkipOrWait (not asyncReadEntriesOrWait).
         Mockito.doAnswer(inv -> {
             PersistentDispatcherMultipleConsumers dispatcher1 = inv.getArgument(2);
             dispatcher1.readEntriesFailed(new ManagedLedgerException.CursorAlreadyClosedException("cursor closed"),
-                    null);
+                    PersistentDispatcherMultipleConsumers.ReadType.Normal);
             return null;
-        }).when(cursor).asyncReadEntriesOrWait(Mockito.anyInt(), Mockito.anyLong(), Mockito.eq(dispatcher),
-                Mockito.any(), Mockito.any());
+        }).when(cursor).asyncReadEntriesWithSkipOrWait(Mockito.anyInt(), Mockito.anyLong(), Mockito.eq(dispatcher),
+                Mockito.any(), Mockito.any(), Mockito.any());
 
         dispatcher.readMoreEntries();
 

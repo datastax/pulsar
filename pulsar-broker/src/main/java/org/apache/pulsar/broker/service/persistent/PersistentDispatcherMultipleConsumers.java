@@ -403,6 +403,7 @@ public class PersistentDispatcherMultipleConsumers extends AbstractDispatcherMul
                         minReplayedPosition = null;
                     }
                     onReadStarted(ReadType.Normal);
+                    readStarted = true;
 
                     cursor.asyncReadEntriesWithSkipOrWait(messagesToRead, bytesToRead, this, ReadType.Normal,
                             topic.getMaxReadPosition(), createReadEntriesSkipConditionForNormalRead());
