@@ -50,7 +50,7 @@ public class PulsarCompactorSubscription extends PersistentSubscription {
         Map<String, Long> properties = cursor.getProperties();
         if (properties.containsKey(Compactor.COMPACTED_TOPIC_LEDGER_PROPERTY)) {
             long compactedLedgerId = properties.get(Compactor.COMPACTED_TOPIC_LEDGER_PROPERTY);
-            compactedTopic.newCompactedLedger(cursor.getMarkDeletedPosition(), compactedLedgerId)
+            compactedTopic.recoverCompactedLedger(cursor.getMarkDeletedPosition(), compactedLedgerId)
                     .thenAccept(previousContext -> {
                         if (previousContext != null) {
                             compactedTopic.deleteCompactedLedger(previousContext.getLedger().getId());
