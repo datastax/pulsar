@@ -103,7 +103,8 @@ public class PulsarTopicCompactionService implements TopicCompactionService {
 
     @Override
     public CompletableFuture<Position> getLastCompactedPosition() {
-        return CompletableFuture.completedFuture(compactedTopic.getCompactionHorizon().orElse(null));
+        return compactedTopic.getHorizonRecoveryFuture()
+                .thenApply(__ -> compactedTopic.getCompactionHorizon().orElse(null));
     }
 
     public CompactedTopicImpl getCompactedTopic() {
