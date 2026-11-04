@@ -57,6 +57,13 @@ RUN echo 'OPTS="$OPTS -Dorg.xerial.snappy.use.systemlib=true"' >> /pulsar/conf/b
 ###  Create one stage to include JVM distribution
 FROM amazoncorretto:${IMAGE_JDK_MAJOR_VERSION}-alpine${ALPINE_VERSION} AS jvm
 
+# Fail the build if the base image ships a JDK older than the minimum security release.
+# 2026-10-20 = October 2026 Oracle CPU (CVE-2026-91403, JSSE). Bump this after each CPU.
+ARG MIN_JDK_RELEASE_DATE=2026-10-20
+RUN . /usr/lib/jvm/default-jvm/release \
+    && echo "JDK ${JAVA_VERSION} released ${JAVA_VERSION_DATE}, required >= ${MIN_JDK_RELEASE_DATE}" \
+    && [ "$(printf '%s\n%s\n' "${MIN_JDK_RELEASE_DATE}" "${JAVA_VERSION_DATE}" | sort | head -n1)" = "${MIN_JDK_RELEASE_DATE}" ]
+
 RUN apk add --no-cache binutils
 
 # Use JLink to create a slimmer JDK distribution (see: https://adoptium.net/blog/2021/10/jlink-to-produce-own-runtime/)
