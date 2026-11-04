@@ -161,6 +161,18 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Set the OffsetsCache TTL before the class is loaded, so OffsetsCacheTest's
+               TTL test works even when another test loads OffsetsCache first in the same
+               JVM fork. Same approach as apache/pulsar master (tiered-storage/jcloud/build.gradle.kts). -->
+          <systemPropertyVariables>
+            <pulsar.jclouds.readhandleimpl.offsetsscache.ttl.seconds>1</pulsar.jclouds.readhandleimpl.offsetsscache.ttl.seconds>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>
