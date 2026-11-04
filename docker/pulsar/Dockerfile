@@ -56,8 +56,12 @@ FROM amazoncorretto:17-alpine3.21 AS jvm
 # 2026-10-20 = October 2026 Oracle CPU (CVE-2026-91403, JSSE). Bump this after each CPU.
 ARG MIN_JDK_RELEASE_DATE=2026-10-20
 RUN . /usr/lib/jvm/default-jvm/release \
-    && echo "JDK ${JAVA_VERSION} released ${JAVA_VERSION_DATE}, required >= ${MIN_JDK_RELEASE_DATE}" \
-    && [ "$(printf '%s\n%s\n' "${MIN_JDK_RELEASE_DATE}" "${JAVA_VERSION_DATE}" | sort | head -n1)" = "${MIN_JDK_RELEASE_DATE}" ]
+    && echo "JDK ${JAVA_VERSION} released ${JAVA_VERSION_DATE}," \
+            "required >= ${MIN_JDK_RELEASE_DATE}" \
+    && OLDEST_DATE="$(printf '%s\n%s\n' \
+            "${MIN_JDK_RELEASE_DATE}" "${JAVA_VERSION_DATE}" \
+            | sort | head -n1)" \
+    && [ "${OLDEST_DATE}" = "${MIN_JDK_RELEASE_DATE}" ]
 
 RUN apk add --no-cache binutils
 
