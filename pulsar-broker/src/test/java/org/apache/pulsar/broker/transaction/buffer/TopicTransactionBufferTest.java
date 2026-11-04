@@ -168,8 +168,10 @@ public class TopicTransactionBufferTest extends TransactionTestBase {
         BrokerService brokerService0 = pulsar.getBrokerService();
         BrokerService brokerService = Mockito.spy(brokerService0);
         AtomicReference<PersistentTopic> reference = new AtomicReference<>();
-        pulsar.getConfiguration().setTopicLoadTimeoutSeconds(10);
-        long topicLoadTimeout = TimeUnit.SECONDS.toMillis(pulsar.getConfiguration().getTopicLoadTimeoutSeconds() + 1);
+        // Same timings as apache/pulsar#20956: a shorter load timeout leaves more of the 20s
+        // await window for the delayed newTopic() to finish on slow CI runners.
+        pulsar.getConfiguration().setTopicLoadTimeoutSeconds(5);
+        long topicLoadTimeout = TimeUnit.SECONDS.toMillis(pulsar.getConfiguration().getTopicLoadTimeoutSeconds() + 3);
 
         Mockito
                 .doAnswer(inv -> {
