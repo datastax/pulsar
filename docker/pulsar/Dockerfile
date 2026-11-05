@@ -57,6 +57,17 @@ RUN echo 'OPTS="$OPTS -Dorg.xerial.snappy.use.systemlib=true"' >> /pulsar/conf/b
 ###  Create one stage to include JVM distribution
 FROM amazoncorretto:${IMAGE_JDK_MAJOR_VERSION}-alpine${ALPINE_VERSION} AS jvm
 
+# Fail the build if the base image ships a JDK older than the minimum security release.
+# 2026-10-20 = October 2026 Oracle CPU (CVE-2026-91403, JSSE). Bump this after each CPU.
+ARG MIN_JDK_RELEASE_DATE=2026-10-20
+RUN . /usr/lib/jvm/default-jvm/release \
+    && echo "JDK ${JAVA_VERSION} released ${JAVA_VERSION_DATE}," \
+            "required >= ${MIN_JDK_RELEASE_DATE}" \
+    && OLDEST_DATE="$(printf '%s\n%s\n' \
+            "${MIN_JDK_RELEASE_DATE}" "${JAVA_VERSION_DATE}" \
+            | sort | head -n1)" \
+    && [ "${OLDEST_DATE}" = "${MIN_JDK_RELEASE_DATE}" ]
+
 RUN apk add --no-cache binutils
 
 # Use JLink to create a slimmer JDK distribution (see: https://adoptium.net/blog/2021/10/jlink-to-produce-own-runtime/)
@@ -110,12 +121,15 @@ RUN apk upgrade --no-cache
 # and regenerate the Python stubs if you change the grpcio version here. Please see
 # pulsar-functions/instance/src/main/python/README.md for more details.
 ARG PULSAR_CLIENT_PYTHON_VERSION
+# pip>=26.2.2: Alpine's py3-pip bundles a certifi with the compromised
+# emSign ECC Root CA - G3 (GHSA-6q48-6c7w-9gw2), so upgrade pip itself too.
 RUN pip3 install --break-system-packages --no-cache-dir \
     --only-binary \
     grpcio==1.78.0 \
     protobuf==6.33.6 \
     pulsar-client[all]==${PULSAR_CLIENT_PYTHON_VERSION} \
-    kazoo
+    kazoo \
+    "pip>=26.2.2"
 
 COPY --from=jvm /opt/jvm /opt/jvm
 ENV JAVA_HOME=/opt/jvm
