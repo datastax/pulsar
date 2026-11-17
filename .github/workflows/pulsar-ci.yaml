@@ -217,7 +217,8 @@ jobs:
           cd $HOME
           $GITHUB_WORKSPACE/build/pulsar_ci_tool.sh store_tar_to_github_actions_artifacts pulsar-maven-repository-binaries \
           tar --exclude '.m2/repository/org/apache/pulsar/pulsar-*-distribution' \
-              -I zstd -cf - .m2/repository/org/apache/pulsar
+              --exclude '.m2/repository/com/datastax/oss/pulsar-*-distribution' \
+              -I zstd -cf - .m2/repository/org/apache/pulsar .m2/repository/com/datastax/oss
           cd $GITHUB_WORKSPACE
           $GITHUB_WORKSPACE/build/pulsar_ci_tool.sh store_tar_to_github_actions_artifacts pulsar-server-distribution \
           tar -I zstd -cf - distribution/server/target/apache-pulsar-*-bin.tar.gz
